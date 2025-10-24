@@ -9,7 +9,8 @@
 #define SD_SCK_PIN   12
 
 // Onboard Buttons
-#define BUTTON_PIN   14
+#define BUTTON_1_PIN 0
+#define BUTTON_2_PIN 14
 
 // I2S
 #define I2S_BCLK_PIN  5
