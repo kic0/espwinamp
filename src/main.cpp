@@ -1,11 +1,15 @@
 #include <Arduino.h>
 #include "pins.h"
 #include <SPI.h>
-#include <SD.h>
+#include <SdFat.h>
 #include <TFT_eSPI.h>
 
 // Create an instance of the TFT_eSPI class
 TFT_eSPI tft = TFT_eSPI();
+
+// SdFat objects
+SdFat sd;
+SdFile root;
 
 void setup() {
   Serial.begin(115200);
@@ -22,8 +26,9 @@ void setup() {
 
   // --- SD Card Test ---
   tft.println("Initializing SD Card...");
-  if (!SD.begin(SD_CS_PIN)) {
+  if (!sd.begin(SD_CS_PIN)) {
     Serial.println("Card Mount Failed");
+    sd.initErrorHalt(&Serial);
     tft.setTextColor(TFT_RED);
     tft.println("SD Card Failed!");
     while (1); // Halt on failure
@@ -34,12 +39,13 @@ void setup() {
   delay(1000);
 
   // List files on SD card to serial
-  File root = SD.open("/");
-  if (root) {
-    File file = root.openNextFile();
-    while (file) {
-      Serial.println(file.name());
-      file = root.openNextFile();
+  if (root.open("/")) {
+    SdFile file;
+    while (file.openNext(&root, O_RDONLY)) {
+      char fileName[256];
+      file.getName(fileName, sizeof(fileName));
+      Serial.println(fileName);
+      file.close();
     }
     root.close();
   } else {
