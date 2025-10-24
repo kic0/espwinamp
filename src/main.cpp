@@ -9,6 +9,9 @@ I2SStream out;
 SineWaveGenerator<int16_t> sineWave(32000);
 int16_t buffer[1024];
 
+// SPI bus for SD Card
+SPIClass spi(HSPI);
+
 void setup() {
   Serial.begin(115200);
   AudioLogger::instance().begin(Serial, AudioLogger::Info);
@@ -25,7 +28,8 @@ void setup() {
   // sineWave.begin(cfg, 440); // 440 Hz tone
 
   // --- SD Card Test ---
-  if (!SD.begin(SD_CS_PIN)) {
+  spi.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
+  if (!SD.begin(SD_CS_PIN, spi, 4000000)) { // Using a lower SPI speed
     Serial.println("Card Mount Failed");
     return;
   }
