@@ -1,11 +1,30 @@
 #include <Arduino.h>
+#include "AudioTools.h"
+#include "pins.h"
 #include <SPI.h>
 #include <SD.h>
-#include "pins.h"
+
+// I2S Sine Wave Test (comment out to test SD card)
+I2SStream out;
+SineWaveGenerator<int16_t> sineWave(32000);
+int16_t buffer[1024];
 
 void setup() {
   Serial.begin(115200);
+  AudioLogger::instance().begin(Serial, AudioLogger::Info);
 
+  // --- I2S Sine Wave Test ---
+  // auto cfg = out.defaultConfig(TX_MODE);
+  // cfg.pin_bck = I2S_BCLK_PIN;
+  // cfg.pin_ws = I2S_LRCK_PIN;
+  // cfg.pin_data = I2S_DOUT_PIN;
+  // cfg.sample_rate = 32000;
+  // cfg.channels = 1; // Mono
+  // cfg.bits_per_sample = 16;
+  // out.begin(cfg);
+  // sineWave.begin(cfg, 440); // 440 Hz tone
+
+  // --- SD Card Test ---
   if (!SD.begin(SD_CS_PIN)) {
     Serial.println("Card Mount Failed");
     return;
@@ -57,5 +76,9 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+  // --- I2S Sine Wave Test ---
+  // size_t bytes_read = sineWave.readBytes((uint8_t*)buffer, sizeof(buffer));
+  // if (bytes_read > 0) {
+  //   out.write((uint8_t*)buffer, bytes_read);
+  // }
 }
