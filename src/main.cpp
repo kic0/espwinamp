@@ -11,6 +11,9 @@ TFT_eSPI tft = TFT_eSPI();
 SdFat sd;
 SdFile root;
 
+// SPI Configuration for SdFat
+SdSpiConfig sd_spi_config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(4), &SPI);
+
 void setup() {
   Serial.begin(115200);
 
@@ -26,7 +29,7 @@ void setup() {
 
   // --- SD Card Test ---
   tft.println("Initializing SD Card...");
-  if (!sd.begin(SD_CS_PIN)) {
+  if (!sd.begin(sd_spi_config)) {
     Serial.println("Card Mount Failed");
     sd.initErrorHalt(&Serial);
     tft.setTextColor(TFT_RED);
