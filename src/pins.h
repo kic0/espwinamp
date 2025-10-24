@@ -2,8 +2,8 @@
 
 // Pin definitions for LILYGO T-Display S3
 
-// SD Card (SPI) - Corrected CS pin to avoid conflict with internal flash
-#define SD_CS_PIN    4
+// SD Card (SPI) - Corrected CS pin to avoid conflict
+#define SD_CS_PIN    16
 #define SD_MOSI_PIN  11
 #define SD_MISO_PIN  13
 #define SD_SCK_PIN   12
