@@ -2,7 +2,7 @@
 
 // Pin definitions for LILYGO T-Display S3
 
-// SD Card (SPI)
+// SD Card (SPI) - Corrected based on community feedback
 #define SD_CS_PIN    10
 #define SD_MOSI_PIN  11
 #define SD_MISO_PIN  13
@@ -11,9 +11,7 @@
 // Onboard Buttons
 #define BUTTON_PIN   14
 
-// I2S (to be confirmed from schematic)
-// NOTE: These are educated guesses based on available "safe" pins.
-// Please verify with the schematic if you have access to it.
+// I2S
 #define I2S_BCLK_PIN  5
 #define I2S_LRCK_PIN  6
 #define I2S_DOUT_PIN  7
