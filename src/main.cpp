@@ -1,11 +1,11 @@
 #include "AudioTools.h"
 #include "BluetoothA2DPSource.h"
+#include "AudioTools/AudioCodecs/CodecMP3Helix.h"
+#include "AudioTools/Disk/AudioSourceSD.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <SPI.h>
-#include "AudioTools/AudioCodecs/CodecMP3Helix.h"
-#include "AudioTools/Disk/AudioSourceSD.h"
 
 // Pin Definitions
 #define OLED_SDA 21
@@ -24,8 +24,8 @@ const char *bt_address = "CA:AE:57:5D:DF:1C";
 const char *file_name = "/data/sample.mp3";
 
 BluetoothA2DPSource a2dp_source;
-AudioSourceSD sd_source(file_name, SD);
-EncodedAudioStream dec(&a2dp_source, new CodecMP3Helix());
+AudioSourceSD sd_source;
+EncodedAudioStream dec(&a2dp_source, new MP3DecoderHelix());
 StreamCopy copier(dec, sd_source);
 
 void connection_state_callback(esp_a2d_connection_state_t state, void* ptr){
@@ -67,6 +67,8 @@ void setup() {
     display.println("SD Card OK.");
     display.display();
     delay(1000);
+
+    sd_source.open(file_name);
 
     display.clearDisplay();
     display.setCursor(0,0);
