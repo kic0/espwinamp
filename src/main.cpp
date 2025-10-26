@@ -4,8 +4,9 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <SPI.h>
-#include "AudioTools/AudioCodecs/CodecMP3Helix.h"
-#include "AudioTools/Disk/AudioSourceSD.h"
+#include "AudioCodecs/CodecMP3Helix.h"
+#include "AudioLibs/AudioSourceSD.h"
+#include "AudioLibs/A2DPStream.h"
 
 // Pin Definitions
 #define OLED_SDA 21
@@ -23,11 +24,10 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 const char *bt_address = "CA:AE:57:5D:DF:1C";
 const char *file_name = "/data/sample.mp3";
 
-BluetoothA2DPSource a2dp_source;
-AudioSourceSD sd_source(file_name, SD_CS, SPI);
+A2DPStream a2dp_stream;
+AudioSourceSD sd_source(file_name, SD_CS);
 MP3DecoderHelix decoder;
-AudioOutputA2DP a2dp_output(a2dp_source);
-StreamCopy copier(a2dp_output, decoder, sd_source);
+StreamCopy copier(a2dp_stream, decoder, sd_source);
 
 void connection_state_callback(esp_a2d_connection_state_t state, void* ptr){
     if (state == ESP_A2D_CONNECTION_STATE_CONNECTED){
@@ -36,6 +36,7 @@ void connection_state_callback(esp_a2d_connection_state_t state, void* ptr){
         display.println("Connected!");
         display.println("Playing...");
         display.display();
+        a2dp_stream.begin(TX_A2DP_I2S);
     } else if (state == ESP_A2D_CONNECTION_STATE_DISCONNECTED){
         display.clearDisplay();
         display.setCursor(0,0);
@@ -59,7 +60,7 @@ void setup() {
     display.display();
     delay(1000);
 
-    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI);
+    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
     if (!SD.begin(SD_CS)) {
         display.println("SD Card Error!");
         display.display();
@@ -75,8 +76,8 @@ void setup() {
     display.println(bt_address);
     display.display();
 
-    a2dp_source.set_on_connection_state_changed(connection_state_callback);
-    a2dp_source.start({bt_address});
+    a2dp_stream.set_on_connection_state_changed(connection_state_callback);
+    a2dp_stream.start({bt_address});
 
     copier.begin();
 }
