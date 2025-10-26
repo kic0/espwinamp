@@ -1,12 +1,12 @@
 #include "AudioTools.h"
 #include "BluetoothA2DPSource.h"
+#include "AudioCodecs/CodecMP3.h"
+#include "AudioLibs/AudioSourceSD.h"
+#include "AudioLibs/A2DPStream.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <SPI.h>
-#include "AudioCodecs/CodecMP3Helix.h"
-#include "AudioLibs/AudioSourceSD.h"
-#include "AudioLibs/A2DPStream.h"
 
 // Pin Definitions
 #define OLED_SDA 21
@@ -24,10 +24,11 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 const char *bt_address = "CA:AE:57:5D:DF:1C";
 const char *file_name = "/data/sample.mp3";
 
-A2DPStream a2dp_stream;
-AudioSourceSD sd_source(file_name, SD_CS);
-MP3DecoderHelix decoder;
-StreamCopy copier(a2dp_stream, decoder, sd_source);
+BluetoothA2DPSource a2dp_source;
+A2DPStream a2dp_out;
+AudioSourceSD sd_source;
+MP3Decoder decoder;
+StreamCopy copier;
 
 void connection_state_callback(esp_a2d_connection_state_t state, void* ptr){
     if (state == ESP_A2D_CONNECTION_STATE_CONNECTED){
@@ -36,7 +37,6 @@ void connection_state_callback(esp_a2d_connection_state_t state, void* ptr){
         display.println("Connected!");
         display.println("Playing...");
         display.display();
-        a2dp_stream.begin(TX_A2DP_I2S);
     } else if (state == ESP_A2D_CONNECTION_STATE_DISCONNECTED){
         display.clearDisplay();
         display.setCursor(0,0);
@@ -60,12 +60,9 @@ void setup() {
     display.display();
     delay(1000);
 
-    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
-    if (!SD.begin(SD_CS)) {
-        display.println("SD Card Error!");
-        display.display();
-        while (1);
-    }
+    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI);
+    SD.begin(SD_CS);
+    sd_source.open(file_name);
     display.println("SD Card OK.");
     display.display();
     delay(1000);
@@ -76,10 +73,11 @@ void setup() {
     display.println(bt_address);
     display.display();
 
-    a2dp_stream.set_on_connection_state_changed(connection_state_callback);
-    a2dp_stream.start({bt_address});
+    a2dp_out.begin(a2dp_source);
+    a2dp_source.set_on_connection_state_changed(connection_state_callback);
+    a2dp_source.start({bt_address});
 
-    copier.begin();
+    copier.begin(a2dp_out, decoder, sd_source);
 }
 
 void loop() {
