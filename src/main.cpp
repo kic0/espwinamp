@@ -1,8 +1,8 @@
 #include "AudioTools.h"
 #include "BluetoothA2DPSource.h"
-#include "AudioTools/AudioCodecs/CodecMP3.h"
-#include "AudioTools/AudioLibs/AudioSourceSD.h"
-#include "AudioTools/AudioLibs/A2DPStream.h"
+#include "arduino-audio-tools/src/AudioTools/AudioCodecs/CodecMP3Mini.h"
+#include "arduino-audio-tools/src/AudioTools/Disk/AudioSourceSD.h"
+#include "arduino-audio-tools/src/AudioTools/AudioLibs/A2DPStream.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
