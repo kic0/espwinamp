@@ -1,93 +1,123 @@
-#include "AudioTools.h"
-#include "BluetoothA2DPSource.h"
-#include "arduino-audio-tools/src/AudioTools/AudioCodecs/CodecMP3Mini.h"
-#include "arduino-audio-tools/src/AudioTools/Disk/AudioSourceSD.h"
-#include "arduino-audio-tools/src/AudioTools/AudioLibs/A2DPStream.h"
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <SPI.h>
+#include <Arduino.h>
+#include <SD.h>
+#include <BluetoothA2DPSource.h>
+#include <MP3DecoderHelix.h>
 
-// Pin Definitions
-#define OLED_SDA 21
-#define OLED_SCL 22
-#define OLED_RST 16
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define SD_CS   13
-#define SD_SCLK 14
-#define SD_MOSI 15
-#define SD_MISO 2
+// ---------- Configuration ----------
+const int SD_CS = 5;            // SD card CS pin
 
-// Global Objects
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
-const char *bt_address = "CA:AE:57:5D:DF:1C";
-const char *file_name = "/data/sample.mp3";
+// ---------- Globals ----------
+BluetoothA2DPSource a2dp;
+libhelix::MP3DecoderHelix decoder;
+File mp3File;
+uint8_t read_buffer[1024];
+int16_t pcm_buffer[4096];
+int32_t pcm_buffer_len = 0;
+int32_t pcm_buffer_offset = 0;
 
-BluetoothA2DPSource a2dp_source;
-A2DPStream a2dp_out;
-AudioSourceSD sd_source;
-MP3Decoder decoder;
-StreamCopy copier;
+// forward declaration
+int32_t get_sound_data(uint8_t *data, int32_t len);
+void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref);
 
-void connection_state_callback(esp_a2d_connection_state_t state, void* ptr){
-    if (state == ESP_A2D_CONNECTION_STATE_CONNECTED){
-        display.clearDisplay();
-        display.setCursor(0,0);
-        display.println("Connected!");
-        display.println("Playing...");
-        display.display();
-    } else if (state == ESP_A2D_CONNECTION_STATE_DISCONNECTED){
-        display.clearDisplay();
-        display.setCursor(0,0);
-        display.println("Disconnected");
-        display.println("Rebooting...");
-        display.display();
-        delay(3000);
-        ESP.restart();
+
+// ---------- Helper: Find MP3 ----------
+String findFirstMP3() {
+  File root = SD.open("/");
+  if (!root) return String();
+
+  File f = root.openNextFile();
+  while (f) {
+    if (!f.isDirectory() && strcasecmp(f.name() + strlen(f.name()) - 4, ".MP3") == 0) {
+      String name = f.name();
+      f.close();
+      root.close();
+      return name;
     }
+    f = root.openNextFile();
+  }
+  root.close();
+  return String();
 }
 
+
+// A2DP callback
+int32_t get_sound_data(uint8_t *data, int32_t len) {
+    if (pcm_buffer_len > 0){
+        int32_t to_copy = pcm_buffer_len > len ? len : pcm_buffer_len;
+        memcpy(data, (uint8_t*)pcm_buffer + pcm_buffer_offset, to_copy);
+        pcm_buffer_len -= to_copy;
+        pcm_buffer_offset += to_copy;
+        return to_copy;
+    }
+
+    int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
+    if (bytes_read <= 0) {
+        // restart song
+        mp3File.seek(0);
+        bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
+        if (bytes_read <= 0) return 0; // stop if file is empty
+    }
+
+    decoder.write(read_buffer, bytes_read);
+
+    // After writing to decoder, new data might be in pcm_buffer
+    if (pcm_buffer_len > 0){
+        int32_t to_copy = pcm_buffer_len > len ? len : pcm_buffer_len;
+        memcpy(data, (uint8_t*)pcm_buffer + pcm_buffer_offset, to_copy);
+        pcm_buffer_len -= to_copy;
+        pcm_buffer_offset += to_copy;
+        return to_copy;
+    }
+
+    return 0;
+}
+
+
+// pcm data callback
+void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
+    memcpy(pcm_buffer, pcm_buffer_cb, len);
+    pcm_buffer_len = len;
+    pcm_buffer_offset = 0;
+}
+
+
+// ---------- Setup ----------
 void setup() {
-    Serial.begin(115200);
-    Wire.begin(OLED_SDA, OLED_SCL);
-    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { for(;;); }
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0,0);
-    display.println("ESP32 MP3 Player");
-    display.display();
-    delay(1000);
+  Serial.begin(115200);
+  while (!Serial) delay(10);
 
-    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI);
-    SD.begin(SD_CS);
-    sd_source.open(file_name);
-    display.println("SD Card OK.");
-    display.display();
-    delay(1000);
+  // 1. SD init
+  if (!SD.begin(SD_CS)) {
+    Serial.println("[SD] init failed!");
+    while (1);
+  }
+  Serial.println("[SD] ready");
 
-    display.clearDisplay();
-    display.setCursor(0,0);
-    display.println("Connecting to:");
-    display.println(bt_address);
-    display.display();
+  // 2. Find MP3
+  String mp3Name = findFirstMP3();
+  if (mp3Name.isEmpty()) {
+    Serial.println("[ERROR] No MP3 file found!");
+    while (1);
+  }
+  Serial.print("[MP3] Playing: ");
+  Serial.println(mp3Name);
 
-    a2dp_out.begin(a2dp_source);
-    a2dp_source.set_on_connection_state_changed(connection_state_callback);
-    a2dp_source.start({bt_address});
+  mp3File = SD.open(mp3Name, FILE_READ);
+  if (!mp3File) {
+    Serial.println("[ERROR] Can't open MP3");
+    while (1);
+  }
 
-    copier.begin(a2dp_out, decoder, sd_source);
+  // 3. Decoder init
+  decoder.setDataCallback(pcm_data_callback);
+
+  // 4. A2DP source
+  a2dp.set_data_callback(get_sound_data);
+  a2dp.start("ESP32_MP3");
+  Serial.println("[BT] A2DP source ready");
+
 }
 
 void loop() {
-    if (!copier.copy()) {
-        display.clearDisplay();
-        display.setCursor(0,0);
-        display.println("Finished");
-        display.println("Rebooting...");
-        display.display();
-        delay(3000);
-        ESP.restart();
-    }
+    delay(1000);
 }
