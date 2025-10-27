@@ -60,6 +60,7 @@ const int long_press_duration = 1000; // 1 second
 enum AppState {
   STARTUP,
   BT_DISCOVERY,
+  SAMPLE_PLAYBACK,
   PLAYLIST_SELECTION,
   PLAYER
 };
@@ -134,6 +135,7 @@ void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, voi
 void handle_button_press(bool is_short_press, bool is_scroll_button);
 void handle_startup();
 void handle_bt_discovery();
+void handle_sample_playback();
 void handle_playlist_selection();
 void handle_player();
 void play_song(String filename);
@@ -176,6 +178,15 @@ void setup() {
         while (1);
     }
     Serial.println("[SD] ready");
+
+    // Create /data directory if it doesn't exist
+    if (!SD.exists("/data")) {
+        if (SD.mkdir("/data")) {
+            Serial.println("Created /data directory");
+        } else {
+            Serial.println("Failed to create /data directory");
+        }
+    }
 
     // BT Init
     SerialBT.begin("ESP32_Winamp", true);
@@ -227,6 +238,9 @@ void loop() {
         case BT_DISCOVERY:
             handle_bt_discovery();
             break;
+        case SAMPLE_PLAYBACK:
+            handle_sample_playback();
+            break;
         case PLAYLIST_SELECTION:
             handle_playlist_selection();
             break;
@@ -261,7 +275,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                     Serial.println("Connected successfully!");
 
                     // Save the address to SD card
-                    File file = SD.open("/bt_address.txt", FILE_WRITE);
+                    File file = SD.open("/data/bt_address.txt", FILE_WRITE);
                     if (file) {
                         char addr_str[18];
                         sprintf(addr_str, "%02x:%02x:%02x:%02x:%02x:%02x", selected_device.address[0], selected_device.address[1], selected_device.address[2], selected_device.address[3], selected_device.address[4], selected_device.address[5]);
@@ -272,7 +286,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                         Serial.println("Failed to save BT address.");
                     }
 
-                    currentState = PLAYLIST_SELECTION;
+                    currentState = SAMPLE_PLAYBACK;
                 } else {
                     Serial.println("Failed to connect.");
                     // Go back to scanning
@@ -347,7 +361,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
 
 void handle_startup() {
     // Check for saved BT address and try to auto-connect
-    File file = SD.open("/bt_address.txt", FILE_READ);
+    File file = SD.open("/data/bt_address.txt", FILE_READ);
     if (file) {
         String addr_str = file.readString();
         file.close();
@@ -358,7 +372,7 @@ void handle_startup() {
 
         if (a2dp.connect_to(addr)) {
             Serial.println("Auto-connected successfully!");
-            currentState = PLAYLIST_SELECTION;
+            currentState = SAMPLE_PLAYBACK;
             return;
         } else {
             Serial.println("Auto-connect failed.");
@@ -397,6 +411,23 @@ void handle_bt_discovery() {
     }
 
     draw_bt_discovery_ui();
+}
+
+void handle_sample_playback() {
+    static bool sample_started = false;
+    if (!sample_started) {
+        display.clearDisplay();
+        display.setCursor(0,0);
+        display.println("Playing connection sound...");
+        display.display();
+        play_song("/data/sample.mp3");
+        sample_started = true;
+    }
+
+    if (mp3File.available() <= 0) {
+        sample_started = false;
+        currentState = PLAYLIST_SELECTION;
+    }
 }
 
 void draw_bt_discovery_ui() {

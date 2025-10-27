@@ -18,7 +18,7 @@ This project is an ESP32-based MP3 player with a Winamp-inspired theme. It plays
 
 -   ESP32 DEVKIT
 -   MicroSD card reader
--   MicroSD card with at least one MP3 file in the root directory
+-   MicroSD card with a `/data` directory containing a `sample.mp3` file, and at least one other directory containing MP3 files.
 -   128x64 I2C OLED display (SSD1306)
 -   Two push buttons for navigation
 
