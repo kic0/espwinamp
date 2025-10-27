@@ -31,6 +31,7 @@ int selected_playlist = 0;
 std::vector<String> current_playlist_files;
 int current_song_index = 0;
 bool is_playing = true;
+bool song_started = false;
 
 // ---------- Configuration ----------
 #define SCREEN_WIDTH 128
@@ -178,6 +179,7 @@ void setup() {
 
     // BT Init
     SerialBT.begin("ESP32_Winamp", true);
+    a2dp.start("ESP32_Winamp");
     Serial.println("Bluetooth device name set");
 }
 
@@ -257,7 +259,6 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 // Connect to the device
                 if (a2dp.connect_to(selected_device.address)) {
                     Serial.println("Connected successfully!");
-                    a2dp.start(selected_device.name.c_str());
 
                     // Save the address to SD card
                     File file = SD.open("/bt_address.txt", FILE_WRITE);
@@ -337,6 +338,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             if (mp3File) mp3File.close();
             a2dp.set_data_callback(nullptr);
             decoder.end();
+            song_started = false;
             currentState = PLAYLIST_SELECTION;
         }
     }
@@ -356,7 +358,6 @@ void handle_startup() {
 
         if (a2dp.connect_to(addr)) {
             Serial.println("Auto-connected successfully!");
-            a2dp.start(addr_str.c_str()); // Assuming the device name is the address string
             currentState = PLAYLIST_SELECTION;
             return;
         } else {
@@ -491,12 +492,6 @@ void play_song(String filename) {
 }
 
 void handle_player() {
-    static bool song_started = false;
-    if (currentState != PLAYER) {
-        song_started = false;
-        return;
-    }
-
     if (!song_started) {
         play_song(current_playlist_files[current_song_index]);
         song_started = true;
