@@ -55,6 +55,8 @@ bool select_pressed = false;
 unsigned long scroll_press_time = 0;
 unsigned long select_press_time = 0;
 const int long_press_duration = 1000; // 1 second
+bool scroll_long_press_triggered = false;
+bool select_long_press_triggered = false;
 
 // App state
 enum AppState {
@@ -103,10 +105,7 @@ int32_t get_sound_data(uint8_t *data, int32_t len) {
 
     int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
     if (bytes_read <= 0) {
-        // restart song
-        mp3File.seek(0);
-        bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
-        if (bytes_read <= 0) return 0; // stop if file is empty
+        return 0; // stop if file is empty
     }
 
     decoder.write(read_buffer, bytes_read);
@@ -204,30 +203,32 @@ void loop() {
     if (current_scroll && !scroll_pressed) {
         scroll_pressed = true;
         scroll_press_time = millis();
+        scroll_long_press_triggered = false;
     } else if (!current_scroll && scroll_pressed) {
         scroll_pressed = false;
-        if (millis() - scroll_press_time < long_press_duration) {
+        if (!scroll_long_press_triggered) {
             handle_button_press(true, true);
         }
     }
-    if (scroll_pressed && (millis() - scroll_press_time >= long_press_duration)) {
+    if (scroll_pressed && !scroll_long_press_triggered && (millis() - scroll_press_time >= long_press_duration)) {
         handle_button_press(false, true);
-        scroll_pressed = false;
+        scroll_long_press_triggered = true;
     }
 
     // Select button
     if (current_select && !select_pressed) {
         select_pressed = true;
         select_press_time = millis();
+        select_long_press_triggered = false;
     } else if (!current_select && select_pressed) {
         select_pressed = false;
-        if (millis() - select_press_time < long_press_duration) {
+        if (!select_long_press_triggered) {
             handle_button_press(true, false);
         }
     }
-    if (select_pressed && (millis() - select_press_time >= long_press_duration)) {
+    if (select_pressed && !select_long_press_triggered && (millis() - select_press_time >= long_press_duration)) {
         handle_button_press(false, false);
-        select_pressed = false;
+        select_long_press_triggered = true;
     }
 
     // --- State machine ---
@@ -420,12 +421,14 @@ void handle_sample_playback() {
         display.setCursor(0,0);
         display.println("Playing connection sound...");
         display.display();
+        a2dp.set_volume(32); // 25% volume
         play_song("/data/sample.mp3");
         sample_started = true;
     }
 
     if (mp3File.available() <= 0) {
         sample_started = false;
+        a2dp.set_volume(127); // 100% volume
         currentState = PLAYLIST_SELECTION;
     }
 }
@@ -459,7 +462,7 @@ void find_playlists() {
 
     File file = root.openNextFile();
     while (file) {
-        if (file.isDirectory()) {
+        if (file.isDirectory() && strcmp(file.name(), "/data") != 0) {
             playlists.push_back(file.name());
         }
         file = root.openNextFile();
@@ -519,6 +522,7 @@ void play_song(String filename) {
     }
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback(get_sound_data);
+    is_playing = true;
     Serial.println("Playing song");
 }
 
@@ -527,5 +531,14 @@ void handle_player() {
         play_song(current_playlist_files[current_song_index]);
         song_started = true;
     }
+
+    if (mp3File && mp3File.available() <= 0) {
+        current_song_index++;
+        if (current_song_index >= current_playlist_files.size()) {
+            current_song_index = 0;
+        }
+        play_song(current_playlist_files[current_song_index]);
+    }
+
     draw_player_ui();
 }

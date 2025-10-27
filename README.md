@@ -79,8 +79,9 @@ The application is a state machine with the following states:
 
 1.  **Startup:** The device displays a "Winamp" splash screen and attempts to auto-connect to a previously saved Bluetooth device.
 2.  **Bluetooth Discovery:** If no saved device is found or the auto-connect fails, the device enters discovery mode. The user can scan for and select a Bluetooth audio device to connect to.
-3.  **Playlist Selection:** After a successful Bluetooth connection, the device scans the SD card for folders, which are treated as playlists. The user can select a playlist to play.
-4.  **Player:** The device plays the MP3 files from the selected playlist. The user can control playback with the buttons.
+3.  **Sample Playback:** After a successful connection, a sample sound (`/data/sample.mp3`) is played at a reduced volume to confirm the connection.
+4.  **Playlist Selection:** After the sample sound has finished, the device scans the SD card for folders, which are treated as playlists. The user can select a playlist to play.
+5.  **Player:** The device plays the MP3 files from the selected playlist. The user can control playback with the buttons.
 
 ### Button Controls
 
