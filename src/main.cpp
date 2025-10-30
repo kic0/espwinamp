@@ -410,14 +410,18 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param) {
                 }
             }
             break;
-        case ESP_BT_GAP_RMT_NAME_RSP_EVT:
-            Serial.printf("Remote name response for %02x:%02x:%02x:%02x:%02x:%02x\n", param->rmt_name_rsp.bda[0], param->rmt_name_rsp.bda[1], param->rmt_name_rsp.bda[2], param->rmt_name_rsp.bda[3], param->rmt_name_rsp.bda[4], param->rmt_name_rsp.bda[5]);
-            for (auto& device : bt_devices) {
-                if (memcmp(device.address, param->rmt_name_rsp.bda, ESP_BD_ADDR_LEN) == 0) {
-                    device.name = String((char*)param->rmt_name_rsp.rmt_name);
-                    Serial.printf("  Name updated to: %s\n", device.name.c_str());
-                    break;
+        case ESP_BT_GAP_READ_REMOTE_NAME_EVT:
+            if (param->read_rmt_name.stat == ESP_BT_STATUS_SUCCESS) {
+                Serial.printf("Remote name response for %02x:%02x:%02x:%02x:%02x:%02x\n", param->read_rmt_name.bda[0], param->read_rmt_name.bda[1], param->read_rmt_name.bda[2], param->read_rmt_name.bda[3], param->read_rmt_name.bda[4], param->read_rmt_name.bda[5]);
+                for (auto& device : bt_devices) {
+                    if (memcmp(device.address, param->read_rmt_name.bda, ESP_BD_ADDR_LEN) == 0) {
+                        device.name = String((char*)param->read_rmt_name.rmt_name);
+                        Serial.printf("  Name updated to: %s\n", device.name.c_str());
+                        break;
+                    }
                 }
+            } else {
+                Serial.println("Failed to read remote name.");
             }
             break;
         default:
