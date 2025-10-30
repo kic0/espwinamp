@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <SD.h>
+#include <SPIFFS.h>
 #include <BluetoothA2DPSource.h>
 #include <MP3DecoderHelix.h>
 #include <Wire.h>
@@ -44,13 +45,16 @@ bool sample_started = false;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // ---------- Globals ----------
+volatile int diag_sample_rate = 0;
+volatile int diag_bits_per_sample = 0;
+volatile int diag_channels = 0;
+
 BluetoothA2DPSource a2dp;
 libhelix::MP3DecoderHelix decoder;
 File mp3File;
 uint8_t read_buffer[1024];
 int16_t pcm_buffer[4096];
 int32_t pcm_buffer_len = 0;
-int32_t pcm_buffer_offset = 0;
 
 // Button states
 bool scroll_pressed = false;
@@ -66,6 +70,8 @@ enum AppState {
   STARTUP,
   BT_DISCOVERY,
   BT_CONNECTING,
+  SPLASH_SCREEN,
+  PREPARE_SAMPLE,
   SAMPLE_PLAYBACK,
   PLAYLIST_SELECTION,
   PLAYER
@@ -97,11 +103,40 @@ String findFirstMP3() {
   return String();
 }
 
+void handle_splash_screen() {
+    static unsigned long splash_start_time = 0;
+    if (splash_start_time == 0) {
+        display.clearDisplay();
+        display.setTextSize(2);
+        display.setTextColor(SSD1306_WHITE);
+        display.setCursor(25, 25);
+        display.println("Winamp");
+        display.display();
+        splash_start_time = millis();
+    }
+
+    if (millis() - splash_start_time >= 3000) {
+        splash_start_time = 0; // Reset for next time
+        currentState = PREPARE_SAMPLE;
+    }
+}
+
+void handle_prepare_sample() {
+    mp3File = SPIFFS.open("/sample.mp3");
+    if (mp3File) {
+        int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
+        if (bytes_read > 0) {
+            decoder.write(read_buffer, bytes_read);
+        }
+    }
+    currentState = SAMPLE_PLAYBACK;
+}
+
 
 // A2DP callback
 int32_t get_data_frames(Frame *frame, int32_t frame_count) {
     // If we don't have enough PCM data, read from file and decode
-    if (pcm_buffer_len < frame_count) {
+    if (pcm_buffer_len == 0) {
         if (mp3File && mp3File.available()) {
             int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
             if (bytes_read > 0) {
@@ -114,22 +149,20 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
     }
 
     // Determine how many frames we can actually provide
-    int32_t frames_to_provide = (pcm_buffer_len < frame_count) ? pcm_buffer_len : frame_count;
+    int32_t frames_to_provide = (pcm_buffer_len / 2 < frame_count) ? pcm_buffer_len / 2 : frame_count;
 
     if (frames_to_provide > 0) {
-        // Copy PCM data into the frame structure
+        // Copy PCM data into the frame structure, de-interleaving stereo
         for (int i = 0; i < frames_to_provide; i++) {
-            frame[i].channel1 = pcm_buffer[pcm_buffer_offset + i];
-            frame[i].channel2 = pcm_buffer[pcm_buffer_offset + i];
+            frame[i].channel1 = pcm_buffer[i * 2];
+            frame[i].channel2 = pcm_buffer[i * 2 + 1];
         }
 
-        // Update buffer offsets
-        pcm_buffer_len -= frames_to_provide;
-        pcm_buffer_offset += frames_to_provide;
-
-        // Reset offset if buffer is empty
-        if (pcm_buffer_len == 0) {
-            pcm_buffer_offset = 0;
+        // Shift the remaining data to the beginning of the buffer
+        int samples_consumed = frames_to_provide * 2;
+        pcm_buffer_len -= samples_consumed;
+        if (pcm_buffer_len > 0) {
+            memmove(pcm_buffer, pcm_buffer + samples_consumed, pcm_buffer_len * sizeof(int16_t));
         }
     }
 
@@ -139,9 +172,19 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
 
 // pcm data callback
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
-    memcpy(pcm_buffer, pcm_buffer_cb, len * sizeof(int16_t));
-    pcm_buffer_len = len;
-    pcm_buffer_offset = 0;
+    // Safely store diagnostic info
+    diag_sample_rate = info.samprate;
+    diag_bits_per_sample = info.bitsPerSample;
+    diag_channels = info.nChans;
+
+    // Append new PCM data to the buffer
+    if (pcm_buffer_len + len < sizeof(pcm_buffer) / sizeof(int16_t)) {
+        memcpy(pcm_buffer + pcm_buffer_len, pcm_buffer_cb, len * sizeof(int16_t));
+        pcm_buffer_len += len;
+    } else {
+        // Buffer overflow, handle error (e.g., log it)
+        Serial.println("PCM buffer overflow!");
+    }
 }
 
 
@@ -149,6 +192,8 @@ void handle_button_press(bool is_short_press, bool is_scroll_button);
 void handle_startup();
 void handle_bt_discovery();
 void handle_bt_connecting();
+void handle_splash_screen();
+void handle_prepare_sample();
 void handle_sample_playback();
 void handle_playlist_selection();
 void handle_player();
@@ -185,6 +230,12 @@ void setup() {
         ESP.restart();
     }
     Serial.println("[SD] ready");
+
+    // 1. SPIFFS init
+    if(!SPIFFS.begin(true)){
+        Serial.println("An Error has occurred while mounting SPIFFS");
+        return;
+    }
 
     // Create /data directory if it doesn't exist
     if (!SD.exists("/data")) {
@@ -234,6 +285,12 @@ void setup() {
 
 
 void loop() {
+    static unsigned long last_heap_log = 0;
+    if (millis() - last_heap_log > 2000) {
+        Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
+                      ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
+        last_heap_log = millis();
+    }
     // --- Button handling ---
     bool current_scroll = !digitalRead(BTN_SCROLL);
 
@@ -264,6 +321,12 @@ void loop() {
         case BT_CONNECTING:
             handle_bt_connecting();
             break;
+        case SPLASH_SCREEN:
+            handle_splash_screen();
+            break;
+        case PREPARE_SAMPLE:
+            handle_prepare_sample();
+            break;
         case SAMPLE_PLAYBACK:
             handle_sample_playback();
             break;
@@ -292,6 +355,9 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 DiscoveredBTDevice selected_device = bt_devices[selected_bt_device];
                 Serial.printf("Selected device: %s\n", selected_device.name.c_str());
 
+                // Allow a moment for any pending remote name requests to complete
+                delay(1000);
+
                 // Stop scanning
                 esp_bt_gap_cancel_discovery();
                 is_scanning = false;
@@ -299,14 +365,14 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 // Connect to the device
                 if (a2dp.connect_to(selected_device.address)) {
                     connection_start_time = millis();
-                    // Save the address to SD card
-                    File file = SD.open("/data/bt_address.txt", FILE_WRITE);
+                    // Save the address to SPIFFS
+                    File file = SPIFFS.open("/bt_address.txt", FILE_WRITE);
                     if (file) {
                         char addr_str[18];
                         sprintf(addr_str, "%02x:%02x:%02x:%02x:%02x:%02x", selected_device.address[0], selected_device.address[1], selected_device.address[2], selected_device.address[3], selected_device.address[4], selected_device.address[5]);
                         file.print(addr_str);
                         file.close();
-                        Serial.println("Saved BT address to SD card.");
+                        Serial.println("Saved BT address to SPIFFS.");
                     } else {
                         Serial.println("Failed to save BT address.");
                     }
@@ -469,7 +535,7 @@ void get_bt_device_props(esp_bt_gap_cb_param_t *param) {
 }
 
 void attempt_auto_connect() {
-    File file = SD.open("/data/bt_address.txt", FILE_READ);
+    File file = SPIFFS.open("/bt_address.txt", FILE_READ);
     if (!file) {
         Serial.println("No saved BT address found.");
         return;
@@ -523,10 +589,9 @@ void handle_bt_connecting() {
     display.display();
 
     if (is_bt_connected) {
-        Serial.println("Connection established. Waiting 2 seconds for stability...");
+        Serial.println("Connection established.");
         a2dp.set_volume(64); // Set volume to 50%
-        delay(2000);
-        currentState = SAMPLE_PLAYBACK;
+        currentState = SPLASH_SCREEN;
     } else if (millis() - connection_start_time > 15000) { // 15 second timeout
         Serial.println("Connection timeout. Returning to discovery.");
         a2dp.disconnect();
@@ -549,14 +614,7 @@ void handle_sample_playback() {
     }
 
     if (!sample_started) {
-        display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(SSD1306_WHITE);
-        display.setCursor(25, 25);
-        display.println("Winamp");
-        display.display();
-        a2dp.set_volume(127); // 100% volume
-        play_song("/data/sample.mp3");
+        a2dp.set_data_callback_in_frames(get_data_frames);
         sample_started = true;
     }
 
@@ -662,6 +720,7 @@ void play_song(String filename) {
         Serial.println("Failed to open song file!");
         return;
     }
+
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback_in_frames(get_data_frames);
     is_playing = true;
