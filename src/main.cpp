@@ -124,10 +124,13 @@ void handle_splash_screen() {
 void handle_prepare_sample() {
     mp3File = SPIFFS.open("/sample.mp3");
     if (mp3File) {
+        Serial.printf("Successfully opened sample.mp3, size: %d bytes\n", mp3File.size());
         int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
         if (bytes_read > 0) {
             decoder.write(read_buffer, bytes_read);
         }
+    } else {
+        Serial.println("Failed to open sample.mp3 from SPIFFS!");
     }
     currentState = SAMPLE_PLAYBACK;
 }
