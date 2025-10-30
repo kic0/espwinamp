@@ -107,7 +107,7 @@ int32_t a2dp_data_callback(uint8_t *data, int32_t len) {
         pcm_buffer_len -= to_copy;
         pcm_buffer_offset += to_copy;
         if (pcm_buffer_len == 0) pcm_buffer_offset = 0;
-        Serial.printf("[DEBUG] a2dp_data_callback: Sent %d bytes\n", to_copy);
+        Serial.printf("[AUDIO_CALLBACK] bytes_read: %d, pcm_len: %d, sent: %d\n", bytes_read, pcm_buffer_len + to_copy, to_copy);
         return to_copy;
     }
 
@@ -506,6 +506,7 @@ void handle_bt_connecting() {
 
     if (is_bt_connected) {
         Serial.println("Connection established. Waiting 2 seconds for stability...");
+        a2dp.set_volume(64); // Set volume to 50%
         delay(2000);
         currentState = SAMPLE_PLAYBACK;
     } else if (millis() - connection_start_time > 15000) { // 15 second timeout
