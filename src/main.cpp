@@ -50,7 +50,6 @@ File mp3File;
 uint8_t read_buffer[1024];
 int16_t pcm_buffer[4096];
 int32_t pcm_buffer_len = 0;
-int32_t pcm_buffer_offset = 0;
 
 // Button states
 bool scroll_pressed = false;
@@ -100,37 +99,36 @@ String findFirstMP3() {
 
 // A2DP callback
 int32_t get_data_frames(Frame *frame, int32_t frame_count) {
-    // If we don't have enough PCM data, read from file and decode
-    if (pcm_buffer_len < frame_count) {
-        if (mp3File && mp3File.available()) {
-            int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
-            if (bytes_read > 0) {
-                decoder.write(read_buffer, bytes_read);
-            }
-        } else {
-            // End of file or file not open
-            return 0;
+    // 1. Fill the PCM buffer if it's running low
+    while (pcm_buffer_len < frame_count * 2 && mp3File && mp3File.available()) {
+        int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
+        if (bytes_read > 0) {
+            decoder.write(read_buffer, bytes_read);
         }
     }
 
-    // Determine how many frames we can actually provide
-    int32_t frames_to_provide = (pcm_buffer_len < frame_count) ? pcm_buffer_len : frame_count;
+    // 2. Provide frames to A2DP
+    int frames_to_provide = 0;
+    if (pcm_buffer_len >= 2) { // Need at least one full stereo sample
+        frames_to_provide = min((int32_t)(pcm_buffer_len / 2), frame_count);
 
-    if (frames_to_provide > 0) {
-        // Copy PCM data into the frame structure
         for (int i = 0; i < frames_to_provide; i++) {
-            frame[i].channel1 = pcm_buffer[pcm_buffer_offset + i];
-            frame[i].channel2 = pcm_buffer[pcm_buffer_offset + i];
+            frame[i].channel1 = pcm_buffer[i * 2];
+            frame[i].channel2 = pcm_buffer[i * 2 + 1];
         }
 
-        // Update buffer offsets
-        pcm_buffer_len -= frames_to_provide;
-        pcm_buffer_offset += frames_to_provide;
-
-        // Reset offset if buffer is empty
-        if (pcm_buffer_len == 0) {
-            pcm_buffer_offset = 0;
+        // 3. Remove the provided data from the buffer
+        int samples_provided = frames_to_provide * 2;
+        pcm_buffer_len -= samples_provided;
+        if (pcm_buffer_len > 0) {
+            // Shift remaining data to the start of the buffer
+            memmove(pcm_buffer, pcm_buffer + samples_provided, pcm_buffer_len * sizeof(int16_t));
         }
+    }
+
+    // If we're at the end of the file and the buffer is empty, we're done
+    if (frames_to_provide == 0 && mp3File && !mp3File.available() && pcm_buffer_len == 0) {
+        return 0; // Signal end of stream
     }
 
     return frames_to_provide;
@@ -139,9 +137,13 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
 
 // pcm data callback
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
-    memcpy(pcm_buffer, pcm_buffer_cb, len * sizeof(int16_t));
-    pcm_buffer_len = len;
-    pcm_buffer_offset = 0;
+    // Append new PCM data to our buffer, checking for overflow
+    if ((pcm_buffer_len + len) <= (sizeof(pcm_buffer) / sizeof(int16_t))) {
+        memcpy(pcm_buffer + pcm_buffer_len, pcm_buffer_cb, len * sizeof(int16_t));
+        pcm_buffer_len += len;
+    } else {
+        Serial.println("PCM buffer overflow!");
+    }
 }
 
 
