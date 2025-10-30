@@ -649,6 +649,8 @@ void play_song(String filename) {
     a2dp.set_data_callback(a2dp_data_callback);
     is_playing = true;
     song_started = true;
+    Serial.println("Starting media stream...");
+    a2dp.media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     Serial.println("Playing song");
 }
 
