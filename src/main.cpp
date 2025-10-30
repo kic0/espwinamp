@@ -73,7 +73,7 @@ enum AppState {
 AppState currentState = STARTUP;
 
 // forward declaration
-int32_t a2dp_data_callback(uint8_t *data, int32_t len);
+int32_t get_data_frames(Frame *frame, int32_t frame_count);
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref);
 void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr);
 
@@ -99,43 +99,43 @@ String findFirstMP3() {
 
 
 // A2DP callback
-int32_t a2dp_data_callback(uint8_t *data, int32_t len) {
-    // If we have cached PCM data, use it first
-    if (pcm_buffer_len > 0) {
-        int32_t to_copy = (pcm_buffer_len > len) ? len : pcm_buffer_len;
-        memcpy(data, (uint8_t *)pcm_buffer + pcm_buffer_offset, to_copy);
-        pcm_buffer_len -= to_copy;
-        pcm_buffer_offset += to_copy;
-        if (pcm_buffer_len == 0) pcm_buffer_offset = 0;
-        // The original pcm_buffer_len before memcpy is pcm_buffer_len + to_copy
-        Serial.printf("[AUDIO_CALLBACK] pcm_len: %d, sent: %d\n", pcm_buffer_len + to_copy, to_copy);
-        return to_copy;
+int32_t get_data_frames(Frame *frame, int32_t frame_count) {
+    Serial.printf("[A2DP] Requesting %d frames\n", frame_count);
+
+    // If we don't have enough PCM data, read from file and decode
+    if (pcm_buffer_len < frame_count) {
+        if (mp3File && mp3File.available()) {
+            int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
+            if (bytes_read > 0) {
+                decoder.write(read_buffer, bytes_read);
+            }
+        } else {
+            // End of file or file not open
+            return 0;
+        }
     }
 
-    // If the file is not open or available, return 0
-    if (!mp3File || !mp3File.available()) {
-        return 0;
+    // Determine how many frames we can actually provide
+    int32_t frames_to_provide = (pcm_buffer_len < frame_count) ? pcm_buffer_len : frame_count;
+
+    if (frames_to_provide > 0) {
+        // Copy PCM data into the frame structure
+        for (int i = 0; i < frames_to_provide; i++) {
+            frame[i].channel1 = pcm_buffer[pcm_buffer_offset + i];
+            frame[i].channel2 = pcm_buffer[pcm_buffer_offset + i];
+        }
+
+        // Update buffer offsets
+        pcm_buffer_len -= frames_to_provide;
+        pcm_buffer_offset += frames_to_provide;
+
+        // Reset offset if buffer is empty
+        if (pcm_buffer_len == 0) {
+            pcm_buffer_offset = 0;
+        }
     }
 
-    // Otherwise read more MP3 frames and let Helix decode
-    int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
-    if (bytes_read <= 0) {
-        return 0; // End of file
-    }
-
-    decoder.write(read_buffer, bytes_read);
-
-    // After decoding, we should have PCM data in pcm_buffer
-    if (pcm_buffer_len > 0) {
-        int32_t to_copy = (pcm_buffer_len > len) ? len : pcm_buffer_len;
-        memcpy(data, (uint8_t *)pcm_buffer + pcm_buffer_offset, to_copy);
-        pcm_buffer_len -= to_copy;
-        pcm_buffer_offset += to_copy;
-        if (pcm_buffer_len == 0) pcm_buffer_offset = 0;
-        return to_copy;
-    }
-
-    return 0; // nothing ready
+    return frames_to_provide;
 }
 
 
@@ -368,7 +368,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 is_playing = false;
                 Serial.println("Paused");
             } else {
-                a2dp.set_data_callback(a2dp_data_callback);
+                a2dp.set_data_callback_in_frames(get_data_frames);
                 is_playing = true;
                 Serial.println("Playing");
             }
@@ -646,11 +646,9 @@ void play_song(String filename) {
         return;
     }
     decoder.setDataCallback(pcm_data_callback);
-    a2dp.set_data_callback(a2dp_data_callback);
+    a2dp.set_data_callback_in_frames(get_data_frames);
     is_playing = true;
     song_started = true;
-    Serial.println("Starting media stream...");
-    a2dp.media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     Serial.println("Playing song");
 }
 
