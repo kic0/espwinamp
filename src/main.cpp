@@ -100,8 +100,6 @@ String findFirstMP3() {
 
 // A2DP callback
 int32_t get_data_frames(Frame *frame, int32_t frame_count) {
-    Serial.printf("[A2DP] Requesting %d frames\n", frame_count);
-
     // If we don't have enough PCM data, read from file and decode
     if (pcm_buffer_len < frame_count) {
         if (mp3File && mp3File.available()) {
@@ -141,7 +139,6 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
 
 // pcm data callback
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
-    Serial.printf("[DEBUG] pcm_data_callback: %u samples received\n", len);
     memcpy(pcm_buffer, pcm_buffer_cb, len * sizeof(int16_t));
     pcm_buffer_len = len;
     pcm_buffer_offset = 0;
@@ -213,10 +210,14 @@ void setup() {
         return;
     }
 
+    // 3. Decoder init
+    decoder.begin();
+    decoder.setDataCallback(pcm_data_callback);
+
     // Delay before Display
     delay(3000);
 
-    // 3. Display init
+    // 4. Display init
     Serial.println("Initializing Display...");
     Wire.begin(OLED_SDA, OLED_SCL);
     if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
