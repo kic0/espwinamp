@@ -21,22 +21,26 @@ void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, voi
 
 
 // ---------- Helper: Find MP3 ----------
-String findFirstMP3() {
-  File root = SD.open("/");
-  if (!root) return String();
-
-  File f = root.openNextFile();
-  while (f) {
-    if (!f.isDirectory() && strcasecmp(f.name() + strlen(f.name()) - 4, ".MP3") == 0) {
-      String name = f.name();
-      f.close();
-      root.close();
-      return name;
+String findFirstMP3(File dir) {
+  while (true) {
+    File entry = dir.openNextFile();
+    if (!entry) {
+      // no more files
+      return String();
     }
-    f = root.openNextFile();
+    if (entry.isDirectory()) {
+      String found = findFirstMP3(entry);
+      if (found.length() > 0) {
+        return found;
+      }
+    } else {
+      // files have extensions
+      if (strcasecmp(entry.name() + strlen(entry.name()) - 4, ".MP3") == 0) {
+        return String(entry.path());
+      }
+    }
+    entry.close();
   }
-  root.close();
-  return String();
 }
 
 
@@ -108,7 +112,9 @@ void setup() {
   Serial.println("[SD] ready");
 
   // 2. Find MP3
-  String mp3Name = findFirstMP3();
+  File root = SD.open("/");
+  String mp3Name = findFirstMP3(root);
+  root.close();
   if (mp3Name.isEmpty()) {
     Serial.println("[ERROR] No MP3 file found!");
     while (1);
