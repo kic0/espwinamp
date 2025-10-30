@@ -98,6 +98,7 @@ void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, voi
 void setup() {
   Serial.begin(115200);
   while (!Serial) delay(10);
+  Serial.println("\n\n--- RUNNING LATEST DEBUG VERSION ---");
 
   // 1. SD init
   if (!SD.begin(SD_CS)) {
