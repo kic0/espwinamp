@@ -42,21 +42,28 @@ String findFirstMP3() {
 
 // A2DP callback
 int32_t get_sound_data(uint8_t *data, int32_t len) {
+    Serial.printf("[A2DP] Requesting %d bytes\n", len);
+
     if (pcm_buffer_len > 0){
         int32_t to_copy = pcm_buffer_len > len ? len : pcm_buffer_len;
         memcpy(data, (uint8_t*)pcm_buffer + pcm_buffer_offset, to_copy);
         pcm_buffer_len -= to_copy;
         pcm_buffer_offset += to_copy;
         if (pcm_buffer_len == 0) pcm_buffer_offset = 0;
+        Serial.printf("[A2DP] Copied %d bytes from PCM buffer\n", to_copy);
         return to_copy;
     }
 
     int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
+    Serial.printf("[MP3] Read %d bytes from file\n", bytes_read);
     if (bytes_read <= 0) {
         // restart song
         mp3File.seek(0);
         bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
-        if (bytes_read <= 0) return 0; // stop if file is empty
+        if (bytes_read <= 0) {
+            Serial.println("[MP3] File is empty, stopping.");
+            return 0; // stop if file is empty
+        }
     }
 
     decoder.write(read_buffer, bytes_read);
@@ -68,15 +75,18 @@ int32_t get_sound_data(uint8_t *data, int32_t len) {
         pcm_buffer_len -= to_copy;
         pcm_buffer_offset += to_copy;
         if (pcm_buffer_len == 0) pcm_buffer_offset = 0;
+        Serial.printf("[A2DP] Copied %d bytes from newly decoded PCM buffer\n", to_copy);
         return to_copy;
     }
 
+    Serial.println("[A2DP] No PCM data available, returning 0.");
     return 0;
 }
 
 
 // pcm data callback
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
+    Serial.printf("[CALLBACK] PCM data received. Length: %u\n", len);
     memcpy(pcm_buffer, pcm_buffer_cb, len * sizeof(int16_t));
     pcm_buffer_len = len;
     pcm_buffer_offset = 0;
