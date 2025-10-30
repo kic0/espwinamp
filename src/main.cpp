@@ -107,7 +107,8 @@ int32_t a2dp_data_callback(uint8_t *data, int32_t len) {
         pcm_buffer_len -= to_copy;
         pcm_buffer_offset += to_copy;
         if (pcm_buffer_len == 0) pcm_buffer_offset = 0;
-        Serial.printf("[AUDIO_CALLBACK] bytes_read: %d, pcm_len: %d, sent: %d\n", bytes_read, pcm_buffer_len + to_copy, to_copy);
+        // The original pcm_buffer_len before memcpy is pcm_buffer_len + to_copy
+        Serial.printf("[AUDIO_CALLBACK] pcm_len: %d, sent: %d\n", pcm_buffer_len + to_copy, to_copy);
         return to_copy;
     }
 
