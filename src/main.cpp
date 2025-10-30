@@ -16,8 +16,8 @@ int32_t pcm_buffer_len = 0;
 int32_t pcm_buffer_offset = 0;
 
 // forward declaration
-int32_t get_sound_data(void *buffer, int len);
-void pcm_data_callback(short *pcm_buffer_cb, size_t len, void *ref);
+int32_t get_sound_data(uint8_t *data, int32_t len);
+void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref);
 
 
 // ---------- Helper: Find MP3 ----------
@@ -41,45 +41,42 @@ String findFirstMP3() {
 
 
 // A2DP callback
-int32_t get_sound_data(void *buffer, int len) {
-    uint8_t *data = (uint8_t *)buffer;
-    // If we have cached PCM data, use it first
-    if (pcm_buffer_len > 0) {
-        int32_t to_copy = (pcm_buffer_len > len) ? len : pcm_buffer_len;
-        memcpy(data, (uint8_t *)pcm_buffer + pcm_buffer_offset, to_copy);
+int32_t get_sound_data(uint8_t *data, int32_t len) {
+    if (pcm_buffer_len > 0){
+        int32_t to_copy = pcm_buffer_len > len ? len : pcm_buffer_len;
+        memcpy(data, (uint8_t*)pcm_buffer + pcm_buffer_offset, to_copy);
         pcm_buffer_len -= to_copy;
         pcm_buffer_offset += to_copy;
         if (pcm_buffer_len == 0) pcm_buffer_offset = 0;
         return to_copy;
     }
 
-    // Otherwise read more MP3 frames and let Helix decode
     int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
-    if (bytes_read <= 0) { // EOF – restart
+    if (bytes_read <= 0) {
+        // restart song
         mp3File.seek(0);
         bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
-        if (bytes_read <= 0) return 0;
+        if (bytes_read <= 0) return 0; // stop if file is empty
     }
 
     decoder.write(read_buffer, bytes_read);
-    decoder.decode(); // <-- crucial
 
-    // After decoding, we should have PCM data in pcm_buffer
-    if (pcm_buffer_len > 0) {
-        int32_t to_copy = (pcm_buffer_len > len) ? len : pcm_buffer_len;
-        memcpy(data, (uint8_t *)pcm_buffer + pcm_buffer_offset, to_copy);
+    // After writing to decoder, new data might be in pcm_buffer
+    if (pcm_buffer_len > 0){
+        int32_t to_copy = pcm_buffer_len > len ? len : pcm_buffer_len;
+        memcpy(data, (uint8_t*)pcm_buffer + pcm_buffer_offset, to_copy);
         pcm_buffer_len -= to_copy;
         pcm_buffer_offset += to_copy;
         if (pcm_buffer_len == 0) pcm_buffer_offset = 0;
         return to_copy;
     }
 
-    return 0; // nothing ready
+    return 0;
 }
 
 
 // pcm data callback
-void pcm_data_callback(short *pcm_buffer_cb, size_t len, void *ref){
+void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
     memcpy(pcm_buffer, pcm_buffer_cb, len * sizeof(int16_t));
     pcm_buffer_len = len;
     pcm_buffer_offset = 0;
@@ -119,7 +116,6 @@ void setup() {
   // 4. A2DP source
   a2dp.set_data_callback(get_sound_data);
   a2dp.start("ESP32_MP3");
-  a2dp.set_audio_info(44100, 2, 16); // 44.1 kHz, stereo, 16-bit
   Serial.println("[BT] A2DP source ready");
 
 }
