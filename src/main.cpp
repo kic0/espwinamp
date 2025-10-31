@@ -23,6 +23,7 @@ struct DiscoveredBTDevice {
 };
 std::vector<DiscoveredBTDevice> bt_devices;
 int selected_bt_device = 0;
+int bt_discovery_scroll_offset = 0;
 bool is_scanning = false;
 bool is_bt_connected = false;
 bool initial_scan_complete = false;
@@ -31,11 +32,15 @@ unsigned long connection_start_time = 0;
 // ---------- Playlist ----------
 std::vector<String> playlists;
 int selected_playlist = 0;
+int playlist_scroll_offset = 0;
 std::vector<String> current_playlist_files;
 int current_song_index = 0;
+int selected_song_in_player = 0;
+int player_scroll_offset = 0;
 bool is_playing = true;
 bool song_started = false;
 bool sample_started = false;
+bool ui_dirty = true;
 
 // ---------- Configuration ----------
 #define SCREEN_WIDTH 128
@@ -70,8 +75,6 @@ enum AppState {
   STARTUP,
   BT_DISCOVERY,
   BT_CONNECTING,
-  SPLASH_SCREEN,
-  PREPARE_SAMPLE,
   SAMPLE_PLAYBACK,
   PLAYLIST_SELECTION,
   PLAYER
@@ -103,37 +106,6 @@ String findFirstMP3() {
   return String();
 }
 
-void handle_splash_screen() {
-    static unsigned long splash_start_time = 0;
-    if (splash_start_time == 0) {
-        display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(SSD1306_WHITE);
-        display.setCursor(25, 25);
-        display.println("Winamp");
-        display.display();
-        splash_start_time = millis();
-    }
-
-    if (millis() - splash_start_time >= 3000) {
-        splash_start_time = 0; // Reset for next time
-        currentState = PREPARE_SAMPLE;
-    }
-}
-
-void handle_prepare_sample() {
-    mp3File = SPIFFS.open("/sample.mp3");
-    if (mp3File) {
-        Serial.printf("Successfully opened sample.mp3, size: %d bytes\n", mp3File.size());
-        int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
-        if (bytes_read > 0) {
-            decoder.write(read_buffer, bytes_read);
-        }
-    } else {
-        Serial.println("Failed to open sample.mp3 from SPIFFS!");
-    }
-    currentState = SAMPLE_PLAYBACK;
-}
 
 
 // A2DP callback
@@ -195,11 +167,10 @@ void handle_button_press(bool is_short_press, bool is_scroll_button);
 void handle_startup();
 void handle_bt_discovery();
 void handle_bt_connecting();
-void handle_splash_screen();
-void handle_prepare_sample();
 void handle_sample_playback();
 void handle_playlist_selection();
 void handle_player();
+void play_file(String filename, bool from_spiffs);
 void play_song(String filename);
 
 void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param);
@@ -324,12 +295,6 @@ void loop() {
         case BT_CONNECTING:
             handle_bt_connecting();
             break;
-        case SPLASH_SCREEN:
-            handle_splash_screen();
-            break;
-        case PREPARE_SAMPLE:
-            handle_prepare_sample();
-            break;
         case SAMPLE_PLAYBACK:
             handle_sample_playback();
             break;
@@ -352,7 +317,15 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             selected_bt_device++;
             if (selected_bt_device >= bt_devices.size()) {
                 selected_bt_device = 0;
+                bt_discovery_scroll_offset = 0;
             }
+            if (selected_bt_device < bt_discovery_scroll_offset) {
+                bt_discovery_scroll_offset = selected_bt_device;
+            }
+            if (selected_bt_device >= bt_discovery_scroll_offset + 4) {
+                bt_discovery_scroll_offset = selected_bt_device - 3;
+            }
+            ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
             if (!bt_devices.empty()) {
                 DiscoveredBTDevice selected_device = bt_devices[selected_bt_device];
@@ -393,7 +366,15 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             selected_playlist++;
             if (selected_playlist >= playlists.size()) {
                 selected_playlist = 0;
+                playlist_scroll_offset = 0;
             }
+            if (selected_playlist < playlist_scroll_offset) {
+                playlist_scroll_offset = selected_playlist;
+            }
+            if (selected_playlist >= playlist_scroll_offset + 4) {
+                playlist_scroll_offset = selected_playlist - 3;
+            }
+            ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
             if (!playlists.empty()) {
                 String playlist_name = "/" + playlists[selected_playlist];
@@ -413,6 +394,9 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
 
                 if (!current_playlist_files.empty()) {
                     current_song_index = 0;
+                    selected_song_in_player = 0;
+                    player_scroll_offset = 0;
+                    ui_dirty = true;
                     currentState = PLAYER;
                 } else {
                     Serial.println("No mp3 files found in this playlist!");
@@ -420,34 +404,24 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             }
         }
     } else if (currentState == PLAYER) {
-        if (is_scroll_button && is_short_press) { // Next song
-            current_song_index++;
-            if (current_song_index >= current_playlist_files.size()) {
-                current_song_index = 0;
+        if (is_scroll_button && is_short_press) { // Scroll through songs
+            selected_song_in_player++;
+            if (selected_song_in_player >= current_playlist_files.size()) {
+                selected_song_in_player = 0;
+                player_scroll_offset = 0;
             }
-            play_song(current_playlist_files[current_song_index]);
-        } else if (is_scroll_button && !is_short_press) { // Previous song
-            current_song_index--;
-            if (current_song_index < 0) {
-                current_song_index = current_playlist_files.size() - 1;
+            if (selected_song_in_player < player_scroll_offset) {
+                player_scroll_offset = selected_song_in_player;
             }
-            play_song(current_playlist_files[current_song_index]);
-        } else if (!is_scroll_button && is_short_press) { // Play/Pause
-            if (is_playing) {
-                a2dp.set_data_callback(nullptr);
-                is_playing = false;
-                Serial.println("Paused");
-            } else {
-                a2dp.set_data_callback_in_frames(get_data_frames);
-                is_playing = true;
-                Serial.println("Playing");
+            if (selected_song_in_player >= player_scroll_offset + 4) {
+                player_scroll_offset = selected_song_in_player - 3;
             }
-        } else if (!is_scroll_button && !is_short_press) { // Back to playlist
-            if (mp3File) mp3File.close();
-            a2dp.set_data_callback(nullptr);
-            decoder.end();
-            song_started = false;
-            currentState = PLAYLIST_SELECTION;
+            ui_dirty = true;
+        } else if (is_scroll_button && !is_short_press) { // Select and play a song
+            if (current_song_index != selected_song_in_player) {
+                current_song_index = selected_song_in_player;
+                play_song(current_playlist_files[current_song_index]);
+            }
         }
     }
 }
@@ -455,6 +429,8 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
 
 void handle_startup() {
     // Always start with BT discovery
+    bt_discovery_scroll_offset = 0;
+    ui_dirty = true;
     currentState = BT_DISCOVERY;
 }
 
@@ -535,6 +511,7 @@ void get_bt_device_props(esp_bt_gap_cb_param_t *param) {
 
     // Add the new device to the list
     bt_devices.push_back(new_device);
+    ui_dirty = true;
 }
 
 void attempt_auto_connect() {
@@ -546,7 +523,8 @@ void attempt_auto_connect() {
 
     String addr_str = file.readString();
     file.close();
-    if (addr_str.length() == 0) {
+    if (addr_str.length() != 17) {
+        Serial.printf("Invalid BT address length in SPIFFS: %d\n", addr_str.length());
         return;
     }
 
@@ -594,7 +572,7 @@ void handle_bt_connecting() {
     if (is_bt_connected) {
         Serial.println("Connection established.");
         a2dp.set_volume(64); // Set volume to 50%
-        currentState = SPLASH_SCREEN;
+        currentState = SAMPLE_PLAYBACK;
     } else if (millis() - connection_start_time > 15000) { // 15 second timeout
         Serial.println("Connection timeout. Returning to discovery.");
         a2dp.disconnect();
@@ -605,32 +583,70 @@ void handle_bt_connecting() {
 }
 
 void handle_sample_playback() {
+    // Static variables are used here to maintain state across loop() calls.
+    // They are initialized once when the function is first called and retain their values.
+    // splash_start_time is reset to 0 when this state is exited, ensuring a clean start next time.
+    static unsigned long splash_start_time = 0;
+    static bool sound_started = false;
+
+    // Initialization step (runs only once)
+    if (splash_start_time == 0) {
+        splash_start_time = millis();
+        sound_started = false;
+
+        // Display splash screen
+        display.clearDisplay();
+        display.setTextSize(2);
+        display.setTextColor(SSD1306_WHITE);
+        display.setCursor(25, 25);
+        display.println("Winamp");
+        display.display();
+    }
+
+    // Check for BT disconnection
     if (!is_bt_connected) {
         Serial.println("BT disconnected during sample playback. Returning to discovery.");
         if (mp3File) mp3File.close();
-        decoder.end();
-        sample_started = false;
-        is_playing = false;
+        // Reset state for next time
+        splash_start_time = 0;
+        sound_started = false;
         initial_scan_complete = false; // Allow rescanning
         currentState = BT_DISCOVERY;
         return;
     }
 
-    if (!sample_started) {
-        a2dp.set_data_callback_in_frames(get_data_frames);
-        sample_started = true;
+    // After 6 seconds, start playing the sound (if not already started)
+    if (millis() - splash_start_time >= 6000 && !sound_started) {
+        play_file("/sample.mp3", true);
+        sound_started = true;
     }
 
-    // The audio data is now handled by the a2dp_data_callback.
-    // We just need to check if the file has finished.
-    if (!mp3File || !mp3File.available()) {
-        Serial.println("Sample finished or file not available.");
-        sample_started = false;
+    // After 15 seconds, move to the next state
+    if (millis() - splash_start_time >= 15000) {
+        Serial.println("Splash screen finished.");
+
+        // Stop sample playback if it's still going
+        if (sound_started && mp3File) {
+             a2dp.set_data_callback_in_frames(nullptr);
+        }
+
+        if (mp3File) {
+            mp3File.close();
+        }
+
+        // Reset state for next time
+        splash_start_time = 0;
+        sound_started = false;
+
+        playlist_scroll_offset = 0;
+        ui_dirty = true;
         currentState = PLAYLIST_SELECTION;
     }
 }
 
 void draw_bt_discovery_ui() {
+    if (!ui_dirty) return;
+    ui_dirty = false;
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
@@ -643,7 +659,7 @@ void draw_bt_discovery_ui() {
         display.println("Scanning...");
     } else {
         display.setCursor(0, 15 + 5);
-        for (int i = 0; i < bt_devices.size(); i++) {
+        for (int i = bt_discovery_scroll_offset; i < bt_devices.size() && i < bt_discovery_scroll_offset + 4; i++) {
             if (i == selected_bt_device) {
                 display.print("> ");
             } else {
@@ -662,7 +678,7 @@ void find_playlists() {
 
     File file = root.openNextFile();
     while (file) {
-        if (file.isDirectory() && strcmp(file.name(), "data") != 0 && strcmp(file.name(), "System Volume Information") != 0) {
+        if (file.isDirectory() && strcmp(file.name(), "data") != 0 && strcmp(file.name(), "System Volume Information") != 0 && file.name()[0] != '.') {
             playlists.push_back(file.name());
         }
         file = root.openNextFile();
@@ -671,6 +687,8 @@ void find_playlists() {
 }
 
 void draw_playlist_ui() {
+    if (!ui_dirty) return;
+    ui_dirty = false;
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
@@ -683,7 +701,7 @@ void draw_playlist_ui() {
         display.println("No playlists found!");
     } else {
         display.setCursor(0, 15 + 5);
-        for (int i = 0; i < playlists.size(); i++) {
+        for (int i = playlist_scroll_offset; i < playlists.size() && i < playlist_scroll_offset + 4; i++) {
             if (i == selected_playlist) {
                 display.print("> ");
             } else {
@@ -703,32 +721,80 @@ void handle_playlist_selection() {
 }
 
 void draw_player_ui() {
+    if (!ui_dirty) return;
+    ui_dirty = false;
+
     display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+
+    // Header
     display.setCursor(0,0);
     display.println("Now Playing:");
     display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
-    display.setCursor(0, 15 + 5);
+
+    // Currently Playing Song
     if (!current_playlist_files.empty()) {
-        display.println(current_playlist_files[current_song_index].c_str());
+        display.setCursor(0, 12);
+        String playing_song = current_playlist_files[current_song_index];
+        // Extract just the filename
+        int last_slash = playing_song.lastIndexOf('/');
+        if (last_slash != -1) {
+            playing_song = playing_song.substring(last_slash + 1);
+        }
+        display.print(">> ");
+        display.println(playing_song.c_str());
     }
+    display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
+
+    // Playlist
+    if (!current_playlist_files.empty()) {
+        display.setCursor(0, 26);
+        for (int i = player_scroll_offset; i < current_playlist_files.size() && i < player_scroll_offset + 4; i++) {
+            if (i == selected_song_in_player) {
+                display.print("> ");
+            } else {
+                display.print("  ");
+            }
+            String song_name = current_playlist_files[i];
+            int last_slash = song_name.lastIndexOf('/');
+            if (last_slash != -1) {
+                song_name = song_name.substring(last_slash + 1);
+            }
+            display.println(song_name.c_str());
+        }
+    }
+
     display.display();
 }
 
-void play_song(String filename) {
+void play_file(String filename, bool from_spiffs) {
     if (mp3File) {
         mp3File.close();
     }
-    mp3File = SD.open(filename);
+
+    if (from_spiffs) {
+        mp3File = SPIFFS.open(filename);
+    } else {
+        mp3File = SD.open(filename);
+    }
+
     if (!mp3File) {
-        Serial.println("Failed to open song file!");
+        Serial.printf("Failed to open file: %s\n", filename.c_str());
         return;
     }
 
+    // Reset PCM buffer to prevent overflow from previous playback
+    pcm_buffer_len = 0;
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback_in_frames(get_data_frames);
+    Serial.printf("Playing %s from %s\n", filename.c_str(), from_spiffs ? "SPIFFS" : "SD");
+}
+
+void play_song(String filename) {
+    play_file(filename, false);
     is_playing = true;
     song_started = true;
-    Serial.println("Playing song");
 }
 
 void handle_player() {
