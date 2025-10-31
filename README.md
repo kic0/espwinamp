@@ -64,6 +64,15 @@ To compile and upload the firmware to your ESP32, connect the device and run:
 ./build.sh --flash
 ```
 
+### Upload the Filesystem Image
+
+To upload the `sample.mp3` file to the ESP32's internal flash, you must also flash the SPIFFS (SPI Flash File System) image.
+
+```bash
+./build.sh --uploadfs
+```
+
+
 ### Erase and Flash
 
 If you are flashing for the first time or have changed the partition table, you should erase the flash memory before uploading the new firmware.
