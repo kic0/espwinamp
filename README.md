@@ -83,3 +83,26 @@ If you are flashing for the first time or have changed the partition table, you 
 ./build.sh --erase-flash --flash
 ```
 You will be prompted to power-cycle the device during the erase process. Follow the on-screen instructions.
+
+
+
+### TODO
+
+1. 3D printed case
+2. Add a batery 
+3. Add moar buttons for better UI/control
+4. Wifi AP for lazy management of mp3 files in the SDcard
+5. Add a minijack for wired headphones/speakers with a MAX98357A (not sure we have enough power for this tho)
+
+
+
+### Disclamer 
+
+This software was developed with the help of AI LLM models, no warranty or support is to be expected.
+
+If you feel like donating:
+
+ XMR: 46hHveE5bAQHv6AE9bbYSJMsJupA2je1BFBUYLmMp899i2yMC8MEn35QiUEZiS2Scd5QGKFrcDk5yZCxL91Rtm9FAz44MMA 
+ 
+ BTC: bc1qu8ykfkqp3t8l7k37fanznh8wj5wuewdmvwfrs2 
+
