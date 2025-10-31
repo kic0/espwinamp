@@ -1,58 +1,76 @@
 # ESP32 Winamp MP3 Player
 
-This project is an ESP32-based MP3 player with a Winamp-inspired theme. It plays MP3 files from an SD card and streams the audio to a Bluetooth speaker or headphones.
+This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD card for file storage, an OLED display for the UI, and physical buttons for control. The device acts as a Bluetooth A2DP source, streaming audio to a connected speaker or headphones.
 
 ## Features
 
--   Plays MP3 files from a microSD card.
--   Streams audio via Bluetooth A2DP to a connected sink (e.g., headphones, speaker).
--   Built with PlatformIO for easy dependency management and building.
+- **Bluetooth A2DP Source:** Streams MP3 audio to any A2DP-compatible speaker or headphones.
+- **SD Card Support:** Playlists are defined as folders in the root directory of the SD card.
+- **OLED Display Interface:** A 128x64 SSD1306 OLED screen displays a Winamp-themed user interface.
+- **Single-Button Control:** All user input is handled by the single 'BOOT' button (GPIO 0), which supports short and long presses.
+- **State Machine Logic:** The application is built around a robust state machine that handles Bluetooth discovery, connection, and multiple playback states.
+- **Interactive "Now Playing" Screen:** While a song is playing, you can scroll through the current playlist and select a new song to play.
+- **Auto-Connect:** The device saves the MAC address of the last connected speaker and will attempt to auto-reconnect on the next boot.
+- **PlatformIO Build System:** The project is built using PlatformIO, which automatically manages all dependencies.
 
 ## Hardware Requirements
 
--   ESP32 DEVKIT
--   MicroSD card reader
--   MicroSD card with at least one MP3 file in the root directory
+| Component           | Connection                  |
+| ------------------- | --------------------------- |
+| **ESP32 DEVKIT**    | -                           |
+| **OLED Display**    | SDA: GPIO 16, SCL: GPIO 17  |
+| **SD Card Reader**  | CS: GPIO 5, SCK: GPIO 18, MOSI: GPIO 23, MISO: GPIO 19 |
+| **'BOOT' Button**   | GPIO 0 (built-in)           |
 
 ## Software Dependencies
 
-This project relies on the following libraries:
+All required libraries are managed automatically by PlatformIO. The project uses the following major libraries:
 
--   `pschatzmann/ESP32-A2DP`: For Bluetooth A2DP source implementation.
--   `pschatzmann/arduino-libhelix`: For MP3 decoding.
--   `Adafruit GFX Library` and `Adafruit SSD1306`: For the OLED display.
--   `SD`: For reading files from the microSD card.
+- `adafruit/Adafruit GFX Library`
+- `adafruit/Adafruit SSD1306`
+- `pschatzmann/ESP32-A2DP`
+- `pschatzmann/arduino-libhelix`
 
-## Building and Flashing
+## Setup and Installation
 
-The project includes a `build.sh` script that automates the build process.
+1.  **Prepare the SD Card:**
+    *   Format an SD card as FAT32.
+    *   Create folders in the root directory of the SD card. Each folder will be treated as a playlist.
+    *   Copy your `.mp3` files into the playlist folders.
 
-### Prerequisites
-
--   Python and `pip` must be installed.
-
-### Instructions
-
-1.  **Clone the repository:**
+2.  **Clone the Repository:**
     ```bash
-    git clone https://github.com/kic0/espwinamp.git
+    git clone https://github.com/kic0/espwinamp/
     cd espwinamp
     ```
 
-2.  **Run the build script:**
-    ```bash
-    ./build.sh
-    ```
-    This script will automatically install PlatformIO and all the necessary libraries, then compile the project.
+3.  **Install PlatformIO:** If you don't have PlatformIO installed, the build script will attempt to install it for you. It is recommended to have Python and `pip` available on your system.
 
-3.  **Flash the firmware:**
-    To flash the compiled firmware to your ESP32, run the build script with the `--flash` argument:
-    ```bash
-    ./build.sh --flash
-    ```
+## Building and Flashing
 
-## How It Works
+The project includes a convenient build script (`build.sh`) that handles compiling, flashing, and other common tasks.
 
-The ESP32 is configured as a Bluetooth A2DP source. When a Bluetooth sink connects, the device finds the first MP3 file in the root of the microSD card and begins streaming it. The audio is decoded on-the-fly using the `libhelix` library.
+### Compile the Code
 
-The device will appear with the Bluetooth name "ESP32_MP3".
+To compile the project and ensure everything is set up correctly, run:
+```bash
+./build.sh
+```
+
+### Flash the Device
+
+To compile and upload the firmware to your ESP32, connect the device and run:
+```bash
+./build.sh --flash
+```
+
+### Erase and Flash
+
+If you are flashing for the first time or have changed the partition table, you should erase the flash memory before uploading the new firmware.
+
+**Warning:** This will erase all data on the ESP32's flash, but not the SD card.
+
+```bash
+./build.sh --erase-flash --flash
+```
+You will be prompted to power-cycle the device during the erase process. Follow the on-screen instructions.
