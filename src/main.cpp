@@ -455,6 +455,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             if (current_song_index != selected_song_in_player) {
                 current_song_index = selected_song_in_player;
                 play_song(current_playlist_files[current_song_index]);
+                ui_dirty = true;
             }
         }
     }
@@ -496,6 +497,7 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param) {
                     if (memcmp(device.address, param->read_rmt_name.bda, ESP_BD_ADDR_LEN) == 0) {
                         device.name = String((char*)param->read_rmt_name.rmt_name);
                         Serial.printf("  Name updated to: %s\n", device.name.c_str());
+                        ui_dirty = true;
                         break;
                     }
                 }
