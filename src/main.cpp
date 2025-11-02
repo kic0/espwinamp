@@ -81,6 +81,52 @@ enum AppState {
 };
 AppState currentState = STARTUP;
 
+int calculate_scroll_offset(int selected_item, int total_items, int viewport_height, int center_offset) {
+    int new_scroll_offset = selected_item - center_offset;
+
+    if (new_scroll_offset < 0) {
+        new_scroll_offset = 0;
+    }
+
+    if (total_items > viewport_height) {
+        if (new_scroll_offset > total_items - viewport_height) {
+            new_scroll_offset = total_items - viewport_height;
+        }
+    } else {
+        new_scroll_offset = 0;
+    }
+    return new_scroll_offset;
+}
+
+// Marquee effect variables
+unsigned long last_marquee_time = 0;
+const int marquee_speed = 250; // Milliseconds per character shift
+bool is_marquee_active = false;
+
+void draw_scrolling_text(String text, int16_t x, int16_t y, bool is_selected) {
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(text.c_str(), x, y, &x1, &y1, &w, &h);
+
+    if (is_selected && w > SCREEN_WIDTH - x - 2) { // 2 pixels for the "> "
+        is_marquee_active = true;
+        int text_len = text.length();
+        int overflow = w - (SCREEN_WIDTH - x - 2);
+        int num_chars_to_scroll = overflow / 6; // Approx 6 pixels per char
+
+        int scroll_offset = (millis() - last_marquee_time) / marquee_speed;
+        scroll_offset %= (num_chars_to_scroll + 2); // +2 for a pause at the start
+
+        String scrolled_text = text;
+        if (scroll_offset > 1) { // Pause at the beginning
+            scrolled_text = text.substring(scroll_offset - 1);
+        }
+        display.println(scrolled_text.c_str());
+    } else {
+        display.println(text.c_str());
+    }
+}
+
 // forward declaration
 int32_t get_data_frames(Frame *frame, int32_t frame_count);
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref);
@@ -265,6 +311,12 @@ void loop() {
                       ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
         last_heap_log = millis();
     }
+    // --- Marquee Animation Trigger ---
+    if (is_marquee_active && millis() - last_marquee_time > marquee_speed) {
+        last_marquee_time = millis();
+        ui_dirty = true;
+    }
+
     // --- Button handling ---
     bool current_scroll = !digitalRead(BTN_SCROLL);
 
@@ -317,14 +369,8 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             selected_bt_device++;
             if (selected_bt_device >= bt_devices.size()) {
                 selected_bt_device = 0;
-                bt_discovery_scroll_offset = 0;
             }
-            if (selected_bt_device < bt_discovery_scroll_offset) {
-                bt_discovery_scroll_offset = selected_bt_device;
-            }
-            if (selected_bt_device >= bt_discovery_scroll_offset + 4) {
-                bt_discovery_scroll_offset = selected_bt_device - 3;
-            }
+            bt_discovery_scroll_offset = calculate_scroll_offset(selected_bt_device, bt_devices.size(), 4, 1);
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
             if (!bt_devices.empty()) {
@@ -366,14 +412,8 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             selected_playlist++;
             if (selected_playlist >= playlists.size()) {
                 selected_playlist = 0;
-                playlist_scroll_offset = 0;
             }
-            if (selected_playlist < playlist_scroll_offset) {
-                playlist_scroll_offset = selected_playlist;
-            }
-            if (selected_playlist >= playlist_scroll_offset + 4) {
-                playlist_scroll_offset = selected_playlist - 3;
-            }
+            playlist_scroll_offset = calculate_scroll_offset(selected_playlist, playlists.size(), 4, 1);
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
             if (!playlists.empty()) {
@@ -408,14 +448,8 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             selected_song_in_player++;
             if (selected_song_in_player >= current_playlist_files.size()) {
                 selected_song_in_player = 0;
-                player_scroll_offset = 0;
             }
-            if (selected_song_in_player < player_scroll_offset) {
-                player_scroll_offset = selected_song_in_player;
-            }
-            if (selected_song_in_player >= player_scroll_offset + 4) {
-                player_scroll_offset = selected_song_in_player - 3;
-            }
+            player_scroll_offset = calculate_scroll_offset(selected_song_in_player, current_playlist_files.size(), 4, 1);
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select and play a song
             if (current_song_index != selected_song_in_player) {
@@ -647,6 +681,7 @@ void handle_sample_playback() {
 void draw_bt_discovery_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
+    is_marquee_active = false;
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
@@ -662,10 +697,11 @@ void draw_bt_discovery_ui() {
         for (int i = bt_discovery_scroll_offset; i < bt_devices.size() && i < bt_discovery_scroll_offset + 4; i++) {
             if (i == selected_bt_device) {
                 display.print("> ");
+                draw_scrolling_text(bt_devices[i].name, display.getCursorX(), display.getCursorY(), true);
             } else {
                 display.print("  ");
+                draw_scrolling_text(bt_devices[i].name, display.getCursorX(), display.getCursorY(), false);
             }
-            display.println(bt_devices[i].name.c_str());
         }
     }
     display.display();
@@ -689,6 +725,7 @@ void find_playlists() {
 void draw_playlist_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
+    is_marquee_active = false;
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
@@ -704,10 +741,11 @@ void draw_playlist_ui() {
         for (int i = playlist_scroll_offset; i < playlists.size() && i < playlist_scroll_offset + 4; i++) {
             if (i == selected_playlist) {
                 display.print("> ");
+                draw_scrolling_text(playlists[i], display.getCursorX(), display.getCursorY(), true);
             } else {
                 display.print("  ");
+                draw_scrolling_text(playlists[i], display.getCursorX(), display.getCursorY(), false);
             }
-            display.println(playlists[i].c_str());
         }
     }
     display.display();
@@ -723,6 +761,7 @@ void handle_playlist_selection() {
 void draw_player_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
+    is_marquee_active = false;
 
     display.clearDisplay();
     display.setTextSize(1);
@@ -751,17 +790,19 @@ void draw_player_ui() {
     if (!current_playlist_files.empty()) {
         display.setCursor(0, 26);
         for (int i = player_scroll_offset; i < current_playlist_files.size() && i < player_scroll_offset + 4; i++) {
-            if (i == selected_song_in_player) {
-                display.print("> ");
-            } else {
-                display.print("  ");
-            }
             String song_name = current_playlist_files[i];
             int last_slash = song_name.lastIndexOf('/');
             if (last_slash != -1) {
                 song_name = song_name.substring(last_slash + 1);
             }
-            display.println(song_name.c_str());
+
+            if (i == selected_song_in_player) {
+                display.print("> ");
+                draw_scrolling_text(song_name, display.getCursorX(), display.getCursorY(), true);
+            } else {
+                display.print("  ");
+                draw_scrolling_text(song_name, display.getCursorX(), display.getCursorY(), false);
+            }
         }
     }
 
