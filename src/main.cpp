@@ -1048,7 +1048,9 @@ void draw_player_ui() {
 
     // Header
     String artist_name = artists[selected_artist];
-    draw_dynamic_text(artist_name, 0, 0, true, 0);
+    String album_name = playlists[selected_playlist];
+    String header_text = artist_name + " - " + album_name;
+    draw_dynamic_text(header_text, 0, 0, true, 0);
     display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
     // Currently Playing Song
