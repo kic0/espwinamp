@@ -790,6 +790,7 @@ void draw_player_ui() {
         if (last_slash != -1) {
             playing_song = playing_song.substring(last_slash + 1);
         }
+        playing_song.replace(".mp3", "");
         display.print(">> ");
         display.println(playing_song.c_str());
     }
@@ -804,6 +805,7 @@ void draw_player_ui() {
             if (last_slash != -1) {
                 song_name = song_name.substring(last_slash + 1);
             }
+            song_name.replace(".mp3", "");
 
             if (i == selected_song_in_player) {
                 display.print("> ");
