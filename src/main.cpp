@@ -437,6 +437,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 is_scanning = false;
 
                 // Connect to the device
+                a2dp.end();
                 a2dp.set_on_connection_state_changed(bt_connection_state_cb);
                 a2dp.start("winamp");
                 if (a2dp.connect_to(selected_device.address)) {
@@ -649,6 +650,7 @@ void attempt_auto_connect() {
         if (memcmp(device.address, saved_addr, ESP_BD_ADDR_LEN) == 0) {
             Serial.printf("Saved device %s found in scan results. Attempting to connect...\n", addr_str.c_str());
             delay(1000); // Allow a moment for any pending remote name requests to complete
+            a2dp.end();
             a2dp.set_on_connection_state_changed(bt_connection_state_cb);
             a2dp.start("winamp");
             if (a2dp.connect_to(saved_addr)) {
