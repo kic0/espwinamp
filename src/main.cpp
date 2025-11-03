@@ -29,6 +29,11 @@ bool is_bt_connected = false;
 bool initial_scan_complete = false;
 unsigned long connection_start_time = 0;
 
+// ---------- Artists ----------
+std::vector<String> artists;
+int selected_artist = 0;
+int artist_scroll_offset = 0;
+
 // ---------- Playlist ----------
 std::vector<String> playlists;
 int selected_playlist = 0;
@@ -82,6 +87,7 @@ enum AppState {
   BT_DISCOVERY,
   BT_CONNECTING,
   SAMPLE_PLAYBACK,
+  ARTIST_SELECTION,
   PLAYLIST_SELECTION,
   PLAYER
 };
@@ -214,6 +220,8 @@ void handle_startup();
 void handle_bt_discovery();
 void handle_bt_connecting();
 void handle_sample_playback();
+void handle_artist_selection();
+void draw_artist_ui();
 void handle_playlist_selection();
 void draw_playlist_ui();
 void handle_player();
@@ -384,6 +392,9 @@ void loop() {
         case SAMPLE_PLAYBACK:
             handle_sample_playback();
             break;
+        case ARTIST_SELECTION:
+            handle_artist_selection();
+            break;
         case PLAYLIST_SELECTION:
             handle_playlist_selection();
             break;
@@ -447,16 +458,40 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 }
             }
         }
-    } else if (currentState == PLAYLIST_SELECTION) {
+    } else if (currentState == ARTIST_SELECTION) {
         if (is_scroll_button && is_short_press) { // Scroll with short press
-            selected_playlist++;
-            calculate_scroll_offset(selected_playlist, playlists.size(), playlist_scroll_offset, 2);
+            selected_artist++;
+            calculate_scroll_offset(selected_artist, artists.size(), artist_scroll_offset, 2);
             for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
-            if (!playlists.empty()) {
-                String playlist_name = "/" + playlists[selected_playlist];
-                Serial.printf("Selected playlist: %s\n", playlist_name.c_str());
+            if (!artists.empty()) {
+                // Clear playlist data from any previous artist selection
+                playlists.clear();
+                selected_playlist = 0;
+                playlist_scroll_offset = 0;
+
+                // Transition to playlist selection for the chosen artist
+                currentState = PLAYLIST_SELECTION;
+                ui_dirty = true;
+            }
+        }
+    } else if (currentState == PLAYLIST_SELECTION) {
+        if (is_scroll_button && is_short_press) { // Scroll with short press
+            selected_playlist++;
+            calculate_scroll_offset(selected_playlist, playlists.size() + 1, playlist_scroll_offset, 2);
+            for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
+            ui_dirty = true;
+        } else if (is_scroll_button && !is_short_press) { // Select with long press
+            if (selected_playlist == playlists.size()) {
+                // This is the "back" button
+                currentState = ARTIST_SELECTION;
+                ui_dirty = true;
+            } else if (!playlists.empty()) {
+                String artist_name = artists[selected_artist];
+                String playlist_name = playlists[selected_playlist];
+                String full_path = "/" + artist_name + "/" + playlist_name;
+                Serial.printf("Selected playlist: %s\n", full_path.c_str());
 
                 // Scan for mp3 files in the selected playlist folder
                 current_playlist_files.clear();
@@ -687,6 +722,7 @@ void handle_sample_playback() {
         splash_start_time = 0;
         sound_started = false;
         initial_scan_complete = false; // Allow rescanning
+        artists.clear(); // Clear artist data
         currentState = BT_DISCOVERY;
         return;
     }
@@ -716,7 +752,92 @@ void handle_sample_playback() {
 
         playlist_scroll_offset = 0;
         ui_dirty = true;
-        currentState = PLAYLIST_SELECTION;
+        currentState = ARTIST_SELECTION;
+    }
+}
+
+void scan_artists() {
+    artists.clear();
+
+    // Step 1: Always scan the SD card to get the current state
+    std::vector<String> current_artists_on_sd;
+    File root = SD.open("/");
+    if (!root) {
+        Serial.println("Failed to open SD root");
+        return;
+    }
+
+    File file = root.openNextFile();
+    while (file) {
+        // Check if it's a potential artist directory
+        if (file.isDirectory() && strcmp(file.name(), "data") != 0 && strcmp(file.name(), "System Volume Information") != 0 && file.name()[0] != '.') {
+            String artist_path = "/" + String(file.name());
+            File artist_dir = SD.open(artist_path);
+            bool is_empty = true;
+            if (artist_dir) {
+                File album_file = artist_dir.openNextFile();
+                while(album_file) {
+                    // We're looking for at least one non-hidden subdirectory (album)
+                    if (album_file.isDirectory() && album_file.name()[0] != '.') {
+                        is_empty = false;
+                        album_file.close(); // Found one, no need to check further
+                        break;
+                    }
+                    album_file = artist_dir.openNextFile();
+                }
+                artist_dir.close();
+            }
+
+            if (!is_empty) {
+                current_artists_on_sd.push_back(file.name());
+            }
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+
+    // Step 2: Try to use the cache
+    File cache_file = SD.open("/data/_artists.dat", FILE_READ);
+    if (cache_file) {
+        int cached_count = cache_file.readStringUntil('\n').toInt();
+
+        // Step 3: Validate cache
+        if (cached_count == current_artists_on_sd.size()) {
+            Serial.println("Artist cache is valid. Loading from cache.");
+            while (cache_file.available()) {
+                String artist_name = cache_file.readStringUntil('\n');
+                artist_name.trim(); // Remove potential whitespace/CRLF
+                if (artist_name.length() > 0) {
+                    artists.push_back(artist_name);
+                }
+            }
+            cache_file.close();
+
+            // Final check: if number of artists read from cache differs, something is wrong. Rescan.
+            if (artists.size() == current_artists_on_sd.size()) {
+                 return; // Cache loaded successfully
+            }
+            Serial.println("Cache file content mismatch. Re-scanning.");
+            artists.clear(); // Clear potentially corrupt data
+        }
+        cache_file.close();
+    }
+
+    // Step 4: If cache is invalid/missing, use SD data and write new cache
+    Serial.println("Artist cache invalid or missing. Using fresh scan data.");
+    artists = current_artists_on_sd; // Use the data we scanned earlier
+
+    SD.remove("/data/_artists.dat"); // Ensure clean slate
+    cache_file = SD.open("/data/_artists.dat", FILE_WRITE);
+    if (cache_file) {
+        cache_file.println(artists.size());
+        for (const auto& artist : artists) {
+            cache_file.println(artist);
+        }
+        cache_file.close();
+        Serial.println("New artist cache created.");
+    } else {
+        Serial.println("Failed to create artist cache file.");
     }
 }
 
@@ -747,20 +868,126 @@ void draw_bt_discovery_ui() {
     display.display();
 }
 
-void find_playlists() {
+void scan_playlists(String artist_name) {
     playlists.clear();
-    File root = SD.open("/");
-    if (!root) return;
+    String artist_path = "/" + artist_name;
 
-    File file = root.openNextFile();
-    while (file) {
-        if (file.isDirectory() && strcmp(file.name(), "data") != 0 && strcmp(file.name(), "System Volume Information") != 0 && file.name()[0] != '.') {
-            playlists.push_back(file.name());
-        }
-        file = root.openNextFile();
+    // Step 1: Always scan the artist folder to get the current state
+    std::vector<String> current_albums_on_sd;
+    File artist_dir = SD.open(artist_path);
+    if (!artist_dir) {
+        Serial.printf("Failed to open artist directory: %s\n", artist_path.c_str());
+        return;
     }
-    root.close();
+
+    File file = artist_dir.openNextFile();
+    while(file) {
+        // Find non-hidden directories (albums) that are not empty
+        if (file.isDirectory() && file.name()[0] != '.') {
+            String album_path = artist_path + "/" + file.name();
+            File album_dir = SD.open(album_path);
+            bool is_empty = true;
+            if (album_dir) {
+                File song_file = album_dir.openNextFile();
+                while(song_file) {
+                    if (!song_file.isDirectory() && String(song_file.name()).endsWith(".mp3")) {
+                        is_empty = false;
+                        song_file.close();
+                        break;
+                    }
+                    song_file = album_dir.openNextFile();
+                }
+                album_dir.close();
+            }
+            if (!is_empty) {
+                current_albums_on_sd.push_back(file.name());
+            }
+        }
+        file = artist_dir.openNextFile();
+    }
+    artist_dir.close();
+
+    // Step 2: Try to use the cache
+    String cache_path = artist_path + "/_albums.dat";
+    File cache_file = SD.open(cache_path, FILE_READ);
+    if (cache_file) {
+        int cached_count = cache_file.readStringUntil('\n').toInt();
+
+        // Step 3: Validate cache
+        if (cached_count == current_albums_on_sd.size()) {
+            Serial.println("Album cache is valid. Loading from cache.");
+            while (cache_file.available()) {
+                String album_name = cache_file.readStringUntil('\n');
+                album_name.trim();
+                if (album_name.length() > 0) {
+                    playlists.push_back(album_name);
+                }
+            }
+            cache_file.close();
+            if (playlists.size() == current_albums_on_sd.size()) {
+                return; // Cache loaded successfully
+            }
+            Serial.println("Album cache file content mismatch. Re-scanning.");
+            playlists.clear();
+        }
+        cache_file.close();
+    }
+
+    // Step 4: If cache is invalid/missing, use SD data and write new cache
+    Serial.println("Album cache invalid or missing. Using fresh scan data.");
+    playlists = current_albums_on_sd;
+
+    SD.remove(cache_path);
+    cache_file = SD.open(cache_path, FILE_WRITE);
+    if (cache_file) {
+        cache_file.println(playlists.size());
+        for (const auto& playlist : playlists) {
+            cache_file.println(playlist);
+        }
+        cache_file.close();
+        Serial.println("New album cache created.");
+    } else {
+        Serial.println("Failed to create album cache file.");
+    }
 }
+
+void draw_artist_ui() {
+    if (!ui_dirty) return;
+    ui_dirty = false;
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+
+    draw_dynamic_text("Select Artist:", 0, 0, false, 0);
+    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+
+    if (artists.empty()) {
+        display.setCursor(0, 26);
+        display.print("No artists found!");
+    } else {
+        for (int i = artist_scroll_offset; i < artists.size() && i < artist_scroll_offset + 4; i++) {
+            int y_pos = 26 + (i - artist_scroll_offset) * 10;
+            String name = artists[i];
+            int line_index = i - artist_scroll_offset + 1;
+            if (i == selected_artist) {
+                display.setCursor(0, y_pos);
+                display.print("> ");
+                draw_dynamic_text(name, y_pos, 12, true, line_index);
+            } else {
+                draw_dynamic_text(name, y_pos, 12, false, line_index);
+            }
+        }
+    }
+    display.display();
+}
+
+void handle_artist_selection() {
+    if (artists.empty()) {
+        scan_artists();
+    }
+    draw_artist_ui();
+}
+
 
 void draw_playlist_ui() {
     if (!ui_dirty) return;
@@ -776,16 +1003,28 @@ void draw_playlist_ui() {
         display.setCursor(0, 26);
         display.print("No playlists found!");
     } else {
-        for (int i = playlist_scroll_offset; i < playlists.size() && i < playlist_scroll_offset + 4; i++) {
+        int list_size = playlists.size();
+        for (int i = playlist_scroll_offset; i < list_size + 1 && i < playlist_scroll_offset + 4; i++) {
             int y_pos = 26 + (i - playlist_scroll_offset) * 10;
-            String name = playlists[i];
             int line_index = i - playlist_scroll_offset + 1;
-            if (i == selected_playlist) {
-                display.setCursor(0, y_pos);
-                display.print("> ");
-                draw_dynamic_text(name, y_pos, 12, true, line_index);
+
+            if (i == list_size) { // After the last playlist, show "back"
+                if (i == selected_playlist) {
+                    display.setCursor(0, y_pos);
+                    display.print("> ");
+                    draw_dynamic_text("<- back", y_pos, 12, true, line_index);
+                } else {
+                    draw_dynamic_text("<- back", y_pos, 12, false, line_index);
+                }
             } else {
-                draw_dynamic_text(name, y_pos, 12, false, line_index);
+                String name = playlists[i];
+                if (i == selected_playlist) {
+                    display.setCursor(0, y_pos);
+                    display.print("> ");
+                    draw_dynamic_text(name, y_pos, 12, true, line_index);
+                } else {
+                    draw_dynamic_text(name, y_pos, 12, false, line_index);
+                }
             }
         }
     }
@@ -794,7 +1033,7 @@ void draw_playlist_ui() {
 
 void handle_playlist_selection() {
     if (playlists.empty()) {
-        find_playlists();
+        scan_playlists(artists[selected_artist]);
     }
     draw_playlist_ui();
 }
@@ -808,8 +1047,8 @@ void draw_player_ui() {
     display.setTextColor(SSD1306_WHITE);
 
     // Header
-    String playlist_name = playlists[selected_playlist];
-    draw_dynamic_text(playlist_name, 0, 0, true, 0);
+    String artist_name = artists[selected_artist];
+    draw_dynamic_text(artist_name, 0, 0, true, 0);
     display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
     // Currently Playing Song
@@ -898,6 +1137,7 @@ void handle_player() {
         song_started = false;
         is_playing = false;
         initial_scan_complete = false; // Allow rescanning
+        artists.clear(); // Clear artist data
         currentState = BT_DISCOVERY;
         return;
     }
