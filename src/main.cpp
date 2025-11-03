@@ -495,11 +495,11 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
 
                 // Scan for mp3 files in the selected playlist folder
                 current_playlist_files.clear();
-                File playlist_folder = SD.open(playlist_name);
+                File playlist_folder = SD.open(full_path);
                 File file = playlist_folder.openNextFile();
                 while(file) {
                     if (!file.isDirectory() && String(file.name()).endsWith(".mp3")) {
-                        current_playlist_files.push_back(playlist_name + "/" + String(file.name()));
+                        current_playlist_files.push_back(full_path + "/" + String(file.name()));
                     }
                     file = playlist_folder.openNextFile();
                 }
