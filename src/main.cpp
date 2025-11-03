@@ -474,6 +474,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                     current_song_index = 0;
                     selected_song_in_player = 0;
                     player_scroll_offset = 0;
+                    song_started = false;
                     ui_dirty = true;
                     currentState = PLAYER;
                 } else {
@@ -492,7 +493,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 // This is the "back" button
                 currentState = PLAYLIST_SELECTION;
                 ui_dirty = true;
-            } else if (current_song_index != selected_song_in_player) {
+            } else if (current_song_index != selected_song_in_player || !song_started) {
                 current_song_index = selected_song_in_player;
                 play_song(current_playlist_files[current_song_index]);
             }
