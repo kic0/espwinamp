@@ -41,6 +41,7 @@ pio run --target clean --environment esp32dev
 # Install dependencies and compile the project
 echo "Installing dependencies and compiling..."
 pio run --environment esp32dev
+cp .pio/build/esp32dev/firmware.bin .
 
 # Erase flash if requested
 if [ "$SHOULD_ERASE" = true ]; then
