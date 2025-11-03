@@ -179,7 +179,7 @@ void draw_dynamic_text(String text, int y, int x_offset, bool allow_scroll, int 
 
     if (w <= max_width) {
         display.setCursor(x_offset, y);
-        display.println(text.c_str());
+        display.print(text.c_str());
         is_marquee_active[line_index] = false;
     } else if (allow_scroll) {
         if (!is_marquee_active[line_index] || marquee_text[line_index] != text) {
@@ -195,7 +195,7 @@ void draw_dynamic_text(String text, int y, int x_offset, bool allow_scroll, int 
         int current_x_offset = (time_since_start % scroll_duration) * scroll_distance / scroll_duration;
 
         display.setCursor(x_offset - current_x_offset, y);
-        display.println(text.c_str());
+        display.print(text.c_str());
     } else { // Truncate
         String truncated_text = text;
         display.getTextBounds(truncated_text + "...", 0, 0, &x_b, &y_b, &w, &h);
@@ -204,7 +204,7 @@ void draw_dynamic_text(String text, int y, int x_offset, bool allow_scroll, int 
             display.getTextBounds(truncated_text + "...", 0, 0, &x_b, &y_b, &w, &h);
         }
         display.setCursor(x_offset, y);
-        display.println(truncated_text + "...");
+        display.print(truncated_text + "...");
         is_marquee_active[line_index] = false;
     }
 }
@@ -487,11 +487,15 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
     } else if (currentState == PLAYER) {
         if (is_scroll_button && is_short_press) { // Scroll through songs
             selected_song_in_player++;
-            calculate_scroll_offset(selected_song_in_player, current_playlist_files.size(), player_scroll_offset, 2);
+            calculate_scroll_offset(selected_song_in_player, current_playlist_files.size() + 1, player_scroll_offset, 2);
             for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select and play a song
-            if (current_song_index != selected_song_in_player) {
+            if (selected_song_in_player == current_playlist_files.size()) {
+                // This is the "back" button
+                currentState = PLAYLIST_SELECTION;
+                ui_dirty = true;
+            } else if (current_song_index != selected_song_in_player) {
                 current_song_index = selected_song_in_player;
                 play_song(current_playlist_files[current_song_index]);
             }
@@ -772,7 +776,7 @@ void draw_playlist_ui() {
 
     if (playlists.empty()) {
         display.setCursor(0, 26);
-        display.println("No playlists found!");
+        display.print("No playlists found!");
     } else {
         for (int i = playlist_scroll_offset; i < playlists.size() && i < playlist_scroll_offset + 4; i++) {
             int y_pos = 26 + (i - playlist_scroll_offset) * 10;
@@ -824,21 +828,34 @@ void draw_player_ui() {
 
     // Playlist
     if (!current_playlist_files.empty()) {
-        for (int i = player_scroll_offset; i < current_playlist_files.size() && i < player_scroll_offset + 4; i++) {
+        int list_size = current_playlist_files.size();
+        for (int i = player_scroll_offset; i < list_size + 1 && i < player_scroll_offset + 4; i++) {
             int y_pos = 26 + (i - player_scroll_offset) * 10;
-            String song_name = current_playlist_files[i];
-            int last_slash = song_name.lastIndexOf('/');
-            if (last_slash != -1) {
-                song_name = song_name.substring(last_slash + 1);
-            }
-            song_name.replace(".mp3", "");
             int line_index = i - player_scroll_offset + 2;
-            if (i == selected_song_in_player) {
-                display.setCursor(0, y_pos);
-                display.print("> ");
-                draw_dynamic_text(song_name, y_pos, 12, true, line_index);
+
+            if (i == list_size) { // After the last song, show "back"
+                if (i == selected_song_in_player) {
+                    display.setCursor(0, y_pos);
+                    display.print("> ");
+                    draw_dynamic_text("<- back", y_pos, 12, true, line_index);
+                } else {
+                    draw_dynamic_text("<- back", y_pos, 12, false, line_index);
+                }
             } else {
-                draw_dynamic_text(song_name, y_pos, 12, false, line_index);
+                String song_name = current_playlist_files[i];
+                int last_slash = song_name.lastIndexOf('/');
+                if (last_slash != -1) {
+                    song_name = song_name.substring(last_slash + 1);
+                }
+                song_name.replace(".mp3", "");
+
+                if (i == selected_song_in_player) {
+                    display.setCursor(0, y_pos);
+                    display.print("> ");
+                    draw_dynamic_text(song_name, y_pos, 12, true, line_index);
+                } else {
+                    draw_dynamic_text(song_name, y_pos, 12, false, line_index);
+                }
             }
         }
     }
