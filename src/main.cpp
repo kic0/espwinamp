@@ -367,11 +367,7 @@ void loop() {
     }
 
     if (should_refresh_for_marquee) {
-        if (currentState == PLAYLIST_SELECTION) {
-            draw_playlist_ui();
-        } else if (currentState == PLAYER) {
-            draw_player_ui();
-        }
+        ui_dirty = true;
     }
 
     switch (currentState) {
@@ -729,12 +725,12 @@ void draw_bt_discovery_ui() {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0,0);
-    display.println("Select BT Speaker:");
+    display.print("Select BT Speaker:");
     display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
     if (bt_devices.empty()) {
         display.setCursor(0, 15 + 5);
-        display.println("Scanning...");
+        display.print("Scanning...");
     } else {
         display.setCursor(0, 15 + 5);
         for (int i = bt_discovery_scroll_offset; i < bt_devices.size() && i < bt_discovery_scroll_offset + 4; i++) {
@@ -743,7 +739,7 @@ void draw_bt_discovery_ui() {
             } else {
                 display.print("  ");
             }
-            display.println(bt_devices[i].name.c_str());
+            display.print(bt_devices[i].name.c_str());
         }
     }
     display.display();
