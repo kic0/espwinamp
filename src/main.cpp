@@ -778,7 +778,8 @@ void draw_player_ui() {
 
     // Header
     display.setCursor(0,0);
-    display.println("Now Playing:");
+    String playlist_name = playlists[selected_playlist];
+    display.println(playlist_name.c_str());
     display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
     // Currently Playing Song
