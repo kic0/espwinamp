@@ -322,6 +322,7 @@ void setup() {
         Serial.println(F("SSD1306 allocation failed"));
         for(;;); // Halt if display fails, as it's critical for UI
     }
+    display.setTextWrap(false);
     display.clearDisplay();
     display.setTextSize(2);
     display.setCursor(25, 25);
