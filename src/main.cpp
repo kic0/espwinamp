@@ -437,9 +437,6 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 is_scanning = false;
 
                 // Connect to the device
-                a2dp.end();
-                a2dp.set_on_connection_state_changed(bt_connection_state_cb);
-                a2dp.start("winamp");
                 if (a2dp.connect_to(selected_device.address)) {
                     connection_start_time = millis();
                     // Save the address to SPIFFS
@@ -650,9 +647,6 @@ void attempt_auto_connect() {
         if (memcmp(device.address, saved_addr, ESP_BD_ADDR_LEN) == 0) {
             Serial.printf("Saved device %s found in scan results. Attempting to connect...\n", addr_str.c_str());
             delay(1000); // Allow a moment for any pending remote name requests to complete
-            a2dp.end();
-            a2dp.set_on_connection_state_changed(bt_connection_state_cb);
-            a2dp.start("winamp");
             if (a2dp.connect_to(saved_addr)) {
                 connection_start_time = millis();
                 currentState = BT_CONNECTING;
@@ -705,7 +699,6 @@ void handle_bt_connecting() {
         }
     } else if (millis() - connection_start_time > 15000) { // 15 second timeout
         Serial.println("Connection timeout. Returning to discovery.");
-        a2dp.end();
         is_bt_connected = false;
         currentState = BT_DISCOVERY;
     }
@@ -735,7 +728,6 @@ void handle_sample_playback() {
     // Check for BT disconnection
     if (!is_bt_connected) {
         Serial.println("BT disconnected during sample playback. Returning to discovery.");
-        a2dp.end();
         if (mp3File) mp3File.close();
         // Reset state for next time
         splash_start_time = 0;
@@ -1177,7 +1169,6 @@ void handle_player() {
     if (!is_bt_connected) {
         Serial.println("BT disconnected during playback. Returning to discovery.");
         esp_bt_gap_cancel_discovery(); // a discovery might be running
-        a2dp.end();
         if (mp3File) {
             paused_song_index = current_song_index;
             paused_song_position = mp3File.position();
