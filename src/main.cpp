@@ -26,7 +26,6 @@ int selected_bt_device = 0;
 int bt_discovery_scroll_offset = 0;
 bool is_scanning = false;
 bool is_bt_connected = false;
-bool initial_scan_complete = false;
 unsigned long connection_start_time = 0;
 
 // ---------- Artists ----------
@@ -46,6 +45,8 @@ bool is_playing = true;
 bool song_started = false;
 bool sample_started = false;
 bool ui_dirty = true;
+int paused_song_index = -1;
+unsigned long paused_song_position = 0;
 
 // ---------- Marquee ----------
 const int MAX_MARQUEE_LINES = 6;
@@ -226,8 +227,8 @@ void handle_playlist_selection();
 void draw_playlist_ui();
 void handle_player();
 void draw_player_ui();
-void play_file(String filename, bool from_spiffs);
-void play_song(String filename);
+void play_file(String filename, bool from_spiffs, unsigned long seek_position = 0);
+void play_song(String filename, unsigned long seek_position = 0);
 
 void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset) {
     if (selected_item >= item_count) {
@@ -530,7 +531,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 ui_dirty = true;
             } else if (current_song_index != selected_song_in_player || !song_started) {
                 current_song_index = selected_song_in_player;
-                play_song(current_playlist_files[current_song_index]);
+                play_song(current_playlist_files[current_song_index], 0);
             }
         }
     }
@@ -557,10 +558,9 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param) {
             break;
         case ESP_BT_GAP_DISC_STATE_CHANGED_EVT:
             if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
+                is_scanning = false;
+                Serial.println("BT discovery stopped.");
                 if (currentState == BT_DISCOVERY) {
-                    is_scanning = false;
-                    initial_scan_complete = true;
-                    Serial.println("BT discovery stopped.");
                     attempt_auto_connect();
                 }
             }
@@ -646,6 +646,7 @@ void attempt_auto_connect() {
     for (const auto& device : bt_devices) {
         if (memcmp(device.address, saved_addr, ESP_BD_ADDR_LEN) == 0) {
             Serial.printf("Saved device %s found in scan results. Attempting to connect...\n", addr_str.c_str());
+            delay(1000); // Allow a moment for any pending remote name requests to complete
             connection_start_time = millis();
             a2dp.connect_to(saved_addr);
             currentState = BT_CONNECTING;
@@ -657,17 +658,21 @@ void attempt_auto_connect() {
 }
 
 void handle_bt_discovery() {
-    if (!is_scanning && !initial_scan_complete) {
+    // a scan is throttled to once every 12 seconds
+    static unsigned long last_scan_time = -12000;
+
+    if (!is_scanning && millis() - last_scan_time > 12000) {
         Serial.println("Starting BT device discovery...");
         bt_devices.clear();
+        selected_bt_device = 0; // a new scan is starting, lets reset the selection
 
-        // Use the enum defined in esp_gap_bt_api.h
-        esp_bt_inq_mode_t mode = ESP_BT_INQ_MODE_GENERAL_INQUIRY; // 0
-        uint8_t inquiry_length = 10;   // seconds
-        uint8_t num_responses = 0;     // let it return all
+        esp_bt_inq_mode_t mode = ESP_BT_INQ_MODE_GENERAL_INQUIRY;
+        uint8_t inquiry_length = 10;
+        uint8_t num_responses = 0;
 
         esp_bt_gap_start_discovery(mode, inquiry_length, num_responses);
         is_scanning = true;
+        last_scan_time = millis();
     }
     draw_bt_discovery_ui();
 }
@@ -683,12 +688,15 @@ void handle_bt_connecting() {
     if (is_bt_connected) {
         Serial.println("Connection established.");
         a2dp.set_volume(64); // Set volume to 50%
-        currentState = SAMPLE_PLAYBACK;
+        if (paused_song_index != -1) {
+            currentState = PLAYER;
+        } else {
+            currentState = SAMPLE_PLAYBACK;
+        }
     } else if (millis() - connection_start_time > 15000) { // 15 second timeout
         Serial.println("Connection timeout. Returning to discovery.");
         a2dp.disconnect();
         is_bt_connected = false;
-        initial_scan_complete = false; // Allow rescanning
         currentState = BT_DISCOVERY;
     }
 }
@@ -721,7 +729,6 @@ void handle_sample_playback() {
         // Reset state for next time
         splash_start_time = 0;
         sound_started = false;
-        initial_scan_complete = false; // Allow rescanning
         artists.clear(); // Clear artist data
         currentState = BT_DISCOVERY;
         return;
@@ -852,11 +859,12 @@ void draw_bt_discovery_ui() {
     display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
     if (bt_devices.empty()) {
-        display.setCursor(0, 15 + 5);
+        display.setCursor(0, 26);
         display.print("Scanning...");
     } else {
-        display.setCursor(0, 15 + 5);
         for (int i = bt_discovery_scroll_offset; i < bt_devices.size() && i < bt_discovery_scroll_offset + 4; i++) {
+            int y_pos = 26 + (i - bt_discovery_scroll_offset) * 10;
+            display.setCursor(0, y_pos);
             if (i == selected_bt_device) {
                 display.print("> ");
             } else {
@@ -1102,7 +1110,7 @@ void draw_player_ui() {
     display.display();
 }
 
-void play_file(String filename, bool from_spiffs) {
+void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     if (mp3File) {
         mp3File.close();
     }
@@ -1118,15 +1126,38 @@ void play_file(String filename, bool from_spiffs) {
         return;
     }
 
+    if (seek_position > 0) {
+        if (mp3File.seek(seek_position)) {
+            Serial.printf("Resuming from position %lu\n", seek_position);
+            // a small buffer to scan for the sync word
+            char sync_buf[3];
+            // the MP3 sync word is 0xFFF*, so we check for the first 12 bits
+            while (mp3File.available()) {
+                int byte1 = mp3File.read();
+                if (byte1 == 0xFF) {
+                    int byte2 = mp3File.read();
+                    if ((byte2 & 0xE0) == 0xE0) {
+                        // MP3 sync word found, seek back two bytes and start playing
+                        mp3File.seek(mp3File.position() - 2);
+                        break;
+                    }
+                }
+            }
+        } else {
+            Serial.printf("Failed to seek to position %lu\n", seek_position);
+        }
+    }
+
     // Reset PCM buffer to prevent overflow from previous playback
     pcm_buffer_len = 0;
+    decoder.begin();
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback_in_frames(get_data_frames);
     Serial.printf("Playing %s from %s\n", filename.c_str(), from_spiffs ? "SPIFFS" : "SD");
 }
 
-void play_song(String filename) {
-    play_file(filename, false);
+void play_song(String filename, unsigned long seek_position) {
+    play_file(filename, false, seek_position);
     is_playing = true;
     song_started = true;
 }
@@ -1134,18 +1165,30 @@ void play_song(String filename) {
 void handle_player() {
     if (!is_bt_connected) {
         Serial.println("BT disconnected during playback. Returning to discovery.");
-        if (mp3File) mp3File.close();
+        esp_bt_gap_cancel_discovery(); // a discovery might be running
+        if (mp3File) {
+            paused_song_index = current_song_index;
+            paused_song_position = mp3File.position();
+            mp3File.close();
+            Serial.printf("Pausing song %d at position %lu\n", paused_song_index, paused_song_position);
+        }
         decoder.end();
         song_started = false;
         is_playing = false;
-        initial_scan_complete = false; // Allow rescanning
         artists.clear(); // Clear artist data
         currentState = BT_DISCOVERY;
         return;
     }
 
     if (!song_started) {
-        play_song(current_playlist_files[current_song_index]);
+        if (paused_song_index != -1) {
+            current_song_index = paused_song_index;
+            play_song(current_playlist_files[current_song_index], paused_song_position);
+            paused_song_index = -1;
+            paused_song_position = 0;
+        } else {
+            play_song(current_playlist_files[current_song_index], 0);
+        }
     }
 
     // The audio data is now handled by the a2dp_data_callback.
@@ -1156,7 +1199,7 @@ void handle_player() {
         if (current_song_index >= current_playlist_files.size()) {
             current_song_index = 0;
         }
-        play_song(current_playlist_files[current_song_index]);
+        play_song(current_playlist_files[current_song_index], 0);
         ui_dirty = true;
     }
 
