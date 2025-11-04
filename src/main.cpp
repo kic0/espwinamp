@@ -889,6 +889,7 @@ void scan_artists() {
                 current_artists_on_sd.push_back(file.name());
             }
         }
+        file.close();
         file = root.openNextFile();
     }
     root.close();
@@ -1010,6 +1011,7 @@ void scan_playlists(String artist_name) {
                 current_albums_on_sd.push_back(file.name());
             }
         }
+        file.close();
         file = artist_dir.openNextFile();
     }
     artist_dir.close();
