@@ -587,6 +587,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                             current_playlist_files.push_back({full_path + "/" + fileName, WAV});
                         }
                     }
+                    file.close();
                     file = playlist_folder.openNextFile();
                 }
                 playlist_folder.close();
@@ -880,6 +881,7 @@ void scan_artists() {
                         album_file.close(); // Found one, no need to check further
                         break;
                     }
+                    album_file.close();
                     album_file = artist_dir.openNextFile();
                 }
                 artist_dir.close();
@@ -889,6 +891,7 @@ void scan_artists() {
                 current_artists_on_sd.push_back(file.name());
             }
         }
+        file.close();
         file = root.openNextFile();
     }
     root.close();
@@ -1002,6 +1005,7 @@ void scan_playlists(String artist_name) {
                             break;
                         }
                     }
+                    song_file.close();
                     song_file = album_dir.openNextFile();
                 }
                 album_dir.close();
@@ -1010,6 +1014,7 @@ void scan_playlists(String artist_name) {
                 current_albums_on_sd.push_back(file.name());
             }
         }
+        file.close();
         file = artist_dir.openNextFile();
     }
     artist_dir.close();
