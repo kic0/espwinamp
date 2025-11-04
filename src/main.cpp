@@ -290,6 +290,7 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position = 
 void play_wav(String filename, unsigned long seek_position = 0);
 void play_mp3(String filename, unsigned long seek_position = 0);
 void play_song(Song song, unsigned long seek_position = 0);
+unsigned long get_directory_size(File dir);
 
 void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset) {
     if (selected_item >= item_count) {
@@ -314,6 +315,22 @@ void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_off
             scroll_offset = item_count - 4;
         }
     }
+}
+
+unsigned long get_directory_size(File dir) {
+    unsigned long total_size = 0;
+    dir.rewindDirectory();
+    File entry = dir.openNextFile();
+    while (entry) {
+        if (entry.isDirectory()) {
+            total_size += get_directory_size(entry);
+        } else {
+            total_size += entry.size();
+        }
+        entry.close();
+        entry = dir.openNextFile();
+    }
+    return total_size;
 }
 
 void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param);
@@ -839,6 +856,7 @@ void scan_artists() {
 
     // Step 1: Always scan the SD card to get the current state
     std::vector<String> current_artists_on_sd;
+    unsigned long total_size = 0;
     File root = SD.open("/");
     if (!root) {
         Serial.println("Failed to open SD root");
@@ -853,6 +871,7 @@ void scan_artists() {
             File artist_dir = SD.open(artist_path);
             bool is_empty = true;
             if (artist_dir) {
+                total_size += get_directory_size(artist_dir);
                 File album_file = artist_dir.openNextFile();
                 while(album_file) {
                     // We're looking for at least one non-hidden subdirectory (album)
@@ -878,9 +897,10 @@ void scan_artists() {
     File cache_file = SD.open("/data/_artists.dat", FILE_READ);
     if (cache_file) {
         int cached_count = cache_file.readStringUntil('\n').toInt();
+        unsigned long cached_size = cache_file.readStringUntil('\n').toInt();
 
         // Step 3: Validate cache
-        if (cached_count == current_artists_on_sd.size()) {
+        if (cached_count == current_artists_on_sd.size() && cached_size == total_size) {
             Serial.println("Artist cache is valid. Loading from cache.");
             while (cache_file.available()) {
                 String artist_name = cache_file.readStringUntil('\n');
@@ -909,6 +929,7 @@ void scan_artists() {
     cache_file = SD.open("/data/_artists.dat", FILE_WRITE);
     if (cache_file) {
         cache_file.println(artists.size());
+        cache_file.println(total_size);
         for (const auto& artist : artists) {
             cache_file.println(artist);
         }
@@ -953,6 +974,7 @@ void scan_playlists(String artist_name) {
 
     // Step 1: Always scan the artist folder to get the current state
     std::vector<String> current_albums_on_sd;
+    unsigned long total_size = 0;
     File artist_dir = SD.open(artist_path);
     if (!artist_dir) {
         Serial.printf("Failed to open artist directory: %s\n", artist_path.c_str());
@@ -967,6 +989,7 @@ void scan_playlists(String artist_name) {
             File album_dir = SD.open(album_path);
             bool is_empty = true;
             if (album_dir) {
+                total_size += get_directory_size(album_dir);
                 File song_file = album_dir.openNextFile();
                 while(song_file) {
                     if (!song_file.isDirectory()) {
@@ -996,9 +1019,10 @@ void scan_playlists(String artist_name) {
     File cache_file = SD.open(cache_path, FILE_READ);
     if (cache_file) {
         int cached_count = cache_file.readStringUntil('\n').toInt();
+        unsigned long cached_size = cache_file.readStringUntil('\n').toInt();
 
         // Step 3: Validate cache
-        if (cached_count == current_albums_on_sd.size()) {
+        if (cached_count == current_albums_on_sd.size() && cached_size == total_size) {
             Serial.println("Album cache is valid. Loading from cache.");
             while (cache_file.available()) {
                 String album_name = cache_file.readStringUntil('\n');
@@ -1025,6 +1049,7 @@ void scan_playlists(String artist_name) {
     cache_file = SD.open(cache_path, FILE_WRITE);
     if (cache_file) {
         cache_file.println(playlists.size());
+        cache_file.println(total_size);
         for (const auto& playlist : playlists) {
             cache_file.println(playlist);
         }
