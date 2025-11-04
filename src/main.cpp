@@ -34,10 +34,17 @@ int selected_artist = 0;
 int artist_scroll_offset = 0;
 
 // ---------- Playlist ----------
+enum FileType { MP3, WAV };
+
+struct Song {
+  String path;
+  FileType type;
+};
+
 std::vector<String> playlists;
 int selected_playlist = 0;
 int playlist_scroll_offset = 0;
-std::vector<String> current_playlist_files;
+std::vector<Song> current_playlist_files;
 int current_song_index = 0;
 int selected_song_in_player = 0;
 int player_scroll_offset = 0;
@@ -68,7 +75,7 @@ volatile int diag_channels = 0;
 
 BluetoothA2DPSource a2dp;
 libhelix::MP3DecoderHelix decoder;
-File mp3File;
+File audioFile;
 uint8_t read_buffer[1024];
 int16_t pcm_buffer[4096];
 int32_t pcm_buffer_len = 0;
@@ -99,6 +106,48 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count);
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref);
 void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr);
 
+struct WavHeader {
+    // RIFF Chunk
+    char riff_header[4]; // "RIFF"
+    uint32_t wav_size; // Size of the WAV file in bytes
+    char wave_header[4]; // "WAVE"
+    // Format Chunk
+    char fmt_header[4]; // "fmt "
+    uint32_t fmt_chunk_size; // Should be 16 for PCM
+    uint16_t audio_format; // Should be 1 for PCM
+    uint16_t num_channels;
+    uint32_t sample_rate;
+    uint32_t byte_rate; // sample_rate * num_channels * bits_per_sample / 8
+    uint16_t sample_alignment; // num_channels * bits_per_sample / 8
+    uint16_t bit_depth;
+    // Data Chunk
+    char data_header[4]; // "data"
+    uint32_t data_size; // Number of bytes in data.
+};
+
+bool parse_wav_header(String path, WavHeader &header) {
+    File file = SD.open(path);
+    if (!file) {
+        Serial.printf("Failed to open WAV file: %s\n", path.c_str());
+        return false;
+    }
+
+    if (file.readBytes((char*)&header, sizeof(WavHeader)) != sizeof(WavHeader)) {
+        Serial.println("Failed to read WAV header");
+        file.close();
+        return false;
+    }
+
+    file.close();
+
+    if (strncmp(header.riff_header, "RIFF", 4) != 0 || strncmp(header.wave_header, "WAVE", 4) != 0) {
+        Serial.println("Invalid WAV file format");
+        return false;
+    }
+
+    return true;
+}
+
 
 // ---------- Helper: Find MP3 ----------
 String findFirstMP3() {
@@ -122,11 +171,21 @@ String findFirstMP3() {
 
 
 // A2DP callback
+// WAV callback
+int32_t get_wav_data_frames(Frame *frame, int32_t frame_count) {
+    if (audioFile && audioFile.available()) {
+        int bytes_to_read = frame_count * diag_channels * (diag_bits_per_sample / 8);
+        int bytes_read = audioFile.read((uint8_t*)frame, bytes_to_read);
+        return bytes_read / (diag_channels * (diag_bits_per_sample / 8));
+    }
+    return 0;
+}
+
 int32_t get_data_frames(Frame *frame, int32_t frame_count) {
     // If we don't have enough PCM data, read from file and decode
     if (pcm_buffer_len == 0) {
-        if (mp3File && mp3File.available()) {
-            int bytes_read = mp3File.read(read_buffer, sizeof(read_buffer));
+        if (audioFile && audioFile.available()) {
+            int bytes_read = audioFile.read(read_buffer, sizeof(read_buffer));
             if (bytes_read > 0) {
                 decoder.write(read_buffer, bytes_read);
             }
@@ -228,7 +287,9 @@ void draw_playlist_ui();
 void handle_player();
 void draw_player_ui();
 void play_file(String filename, bool from_spiffs, unsigned long seek_position = 0);
-void play_song(String filename, unsigned long seek_position = 0);
+void play_wav(String filename, unsigned long seek_position = 0);
+void play_mp3(String filename, unsigned long seek_position = 0);
+void play_song(Song song, unsigned long seek_position = 0);
 
 void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset) {
     if (selected_item >= item_count) {
@@ -494,13 +555,20 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 String full_path = "/" + artist_name + "/" + playlist_name;
                 Serial.printf("Selected playlist: %s\n", full_path.c_str());
 
-                // Scan for mp3 files in the selected playlist folder
+                // Scan for mp3 and wav files in the selected playlist folder
                 current_playlist_files.clear();
                 File playlist_folder = SD.open(full_path);
                 File file = playlist_folder.openNextFile();
                 while(file) {
-                    if (!file.isDirectory() && String(file.name()).endsWith(".mp3")) {
-                        current_playlist_files.push_back(full_path + "/" + String(file.name()));
+                    if (!file.isDirectory()) {
+                        String fileName = String(file.name());
+                        String lowerCaseFileName = fileName;
+                        lowerCaseFileName.toLowerCase();
+                        if (lowerCaseFileName.endsWith(".mp3")) {
+                            current_playlist_files.push_back({full_path + "/" + fileName, MP3});
+                        } else if (lowerCaseFileName.endsWith(".wav")) {
+                            current_playlist_files.push_back({full_path + "/" + fileName, WAV});
+                        }
                     }
                     file = playlist_folder.openNextFile();
                 }
@@ -728,7 +796,7 @@ void handle_sample_playback() {
     // Check for BT disconnection
     if (!is_bt_connected) {
         Serial.println("BT disconnected during sample playback. Returning to discovery.");
-        if (mp3File) mp3File.close();
+        if (audioFile) audioFile.close();
         // Reset state for next time
         splash_start_time = 0;
         sound_started = false;
@@ -748,12 +816,12 @@ void handle_sample_playback() {
         Serial.println("Splash screen finished.");
 
         // Stop sample playback if it's still going
-        if (sound_started && mp3File) {
+        if (sound_started && audioFile) {
              a2dp.set_data_callback_in_frames(nullptr);
         }
 
-        if (mp3File) {
-            mp3File.close();
+        if (audioFile) {
+            audioFile.close();
         }
 
         // Reset state for next time
@@ -901,10 +969,15 @@ void scan_playlists(String artist_name) {
             if (album_dir) {
                 File song_file = album_dir.openNextFile();
                 while(song_file) {
-                    if (!song_file.isDirectory() && String(song_file.name()).endsWith(".mp3")) {
-                        is_empty = false;
-                        song_file.close();
-                        break;
+                    if (!song_file.isDirectory()) {
+                        String fileName = String(song_file.name());
+                        String lowerCaseFileName = fileName;
+                        lowerCaseFileName.toLowerCase();
+                        if (lowerCaseFileName.endsWith(".mp3") || lowerCaseFileName.endsWith(".wav")) {
+                            is_empty = false;
+                            song_file.close();
+                            break;
+                        }
                     }
                     song_file = album_dir.openNextFile();
                 }
@@ -1066,12 +1139,13 @@ void draw_player_ui() {
 
     // Currently Playing Song
     if (!current_playlist_files.empty()) {
-        String playing_song = current_playlist_files[current_song_index];
+        String playing_song = current_playlist_files[current_song_index].path;
         int last_slash = playing_song.lastIndexOf('/');
         if (last_slash != -1) {
             playing_song = playing_song.substring(last_slash + 1);
         }
         playing_song.replace(".mp3", "");
+        playing_song.replace(".wav", "");
         draw_dynamic_text(">> " + playing_song, 12, 0, true, 1);
     }
     display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
@@ -1092,12 +1166,13 @@ void draw_player_ui() {
                     draw_dynamic_text("<- back", y_pos, 12, false, line_index);
                 }
             } else {
-                String song_name = current_playlist_files[i];
+                String song_name = current_playlist_files[i].path;
                 int last_slash = song_name.lastIndexOf('/');
                 if (last_slash != -1) {
                     song_name = song_name.substring(last_slash + 1);
                 }
                 song_name.replace(".mp3", "");
+                song_name.replace(".wav", "");
 
                 if (i == selected_song_in_player) {
                     display.setCursor(0, y_pos);
@@ -1114,34 +1189,34 @@ void draw_player_ui() {
 }
 
 void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
-    if (mp3File) {
-        mp3File.close();
+    if (audioFile) {
+        audioFile.close();
     }
 
     if (from_spiffs) {
-        mp3File = SPIFFS.open(filename);
+        audioFile = SPIFFS.open(filename);
     } else {
-        mp3File = SD.open(filename);
+        audioFile = SD.open(filename);
     }
 
-    if (!mp3File) {
+    if (!audioFile) {
         Serial.printf("Failed to open file: %s\n", filename.c_str());
         return;
     }
 
     if (seek_position > 0) {
-        if (mp3File.seek(seek_position)) {
+        if (audioFile.seek(seek_position)) {
             Serial.printf("Resuming from position %lu\n", seek_position);
             // a small buffer to scan for the sync word
             char sync_buf[3];
             // the MP3 sync word is 0xFFF*, so we check for the first 12 bits
-            while (mp3File.available()) {
-                int byte1 = mp3File.read();
+            while (audioFile.available()) {
+                int byte1 = audioFile.read();
                 if (byte1 == 0xFF) {
-                    int byte2 = mp3File.read();
+                    int byte2 = audioFile.read();
                     if ((byte2 & 0xE0) == 0xE0) {
                         // MP3 sync word found, seek back two bytes and start playing
-                        mp3File.seek(mp3File.position() - 2);
+                        audioFile.seek(audioFile.position() - 2);
                         break;
                     }
                 }
@@ -1159,20 +1234,60 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     Serial.printf("Playing %s from %s\n", filename.c_str(), from_spiffs ? "SPIFFS" : "SD");
 }
 
-void play_song(String filename, unsigned long seek_position) {
+void play_wav(String filename, unsigned long seek_position) {
+    if (audioFile) {
+        audioFile.close();
+    }
+
+    WavHeader header;
+    if (!parse_wav_header(filename, header)) {
+        return;
+    }
+
+    audioFile = SD.open(filename);
+    if (!audioFile) {
+        Serial.printf("Failed to open file: %s\n", filename.c_str());
+        return;
+    }
+
+    // Seek past the header
+    audioFile.seek(sizeof(WavHeader));
+    if (seek_position > 0) {
+        audioFile.seek(seek_position + sizeof(WavHeader));
+    }
+
+    diag_sample_rate = header.sample_rate;
+    diag_bits_per_sample = header.bit_depth;
+    diag_channels = header.num_channels;
+
+    a2dp.set_data_callback_in_frames(get_wav_data_frames);
+    Serial.printf("Playing WAV file: %s\n", filename.c_str());
+    is_playing = true;
+    song_started = true;
+}
+
+void play_mp3(String filename, unsigned long seek_position) {
     play_file(filename, false, seek_position);
     is_playing = true;
     song_started = true;
+}
+
+void play_song(Song song, unsigned long seek_position) {
+    if (song.type == MP3) {
+        play_mp3(song.path, seek_position);
+    } else if (song.type == WAV) {
+        play_wav(song.path, seek_position);
+    }
 }
 
 void handle_player() {
     if (!is_bt_connected) {
         Serial.println("BT disconnected during playback. Returning to discovery.");
         esp_bt_gap_cancel_discovery(); // a discovery might be running
-        if (mp3File) {
+        if (audioFile) {
             paused_song_index = current_song_index;
-            paused_song_position = mp3File.position();
-            mp3File.close();
+            paused_song_position = audioFile.position();
+            audioFile.close();
             Serial.printf("Pausing song %d at position %lu\n", paused_song_index, paused_song_position);
         }
         decoder.end();
@@ -1196,7 +1311,7 @@ void handle_player() {
 
     // The audio data is now handled by the a2dp_data_callback.
     // We just need to check if the file has finished and play the next one.
-    if (is_playing && mp3File && !mp3File.available()) {
+    if (is_playing && audioFile && !audioFile.available()) {
         Serial.println("Song finished, playing next.");
         current_song_index++;
         if (current_song_index >= current_playlist_files.size()) {
