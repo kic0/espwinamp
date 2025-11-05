@@ -1306,6 +1306,7 @@ void handle_player() {
         is_playing = false;
         artists.clear(); // Clear artist data
         currentState = BT_DISCOVERY;
+        ui_dirty = true;
         return;
     }
 
