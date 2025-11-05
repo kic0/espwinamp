@@ -291,6 +291,7 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position = 
 void play_wav(String filename, unsigned long seek_position = 0);
 void play_mp3(String filename, unsigned long seek_position = 0);
 void play_song(Song song, unsigned long seek_position = 0);
+void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y);
 
 void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset) {
     if (selected_item >= item_count) {
@@ -799,10 +800,7 @@ void handle_sample_playback() {
 
         // Display splash screen
         display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(SSD1306_WHITE);
-        display.setCursor(25, 25);
-        display.println("Winamp");
+        draw_bitmap_from_spiffs("/splash.bmp", 10, 0);
         display.display();
     }
 
@@ -1336,6 +1334,104 @@ void handle_player() {
 
     draw_player_ui();
 }
+
+// Helper function to read a 16-bit value from a file
+uint16_t read16(File &f) {
+  uint16_t result;
+  ((uint8_t *)&result)[0] = f.read(); // LSB
+  ((uint8_t *)&result)[1] = f.read(); // MSB
+  return result;
+}
+
+// Helper function to read a 32-bit value from a file
+uint32_t read32(File &f) {
+  uint32_t result;
+  ((uint8_t *)&result)[0] = f.read(); // LSB
+  ((uint8_t *)&result)[1] = f.read();
+  ((uint8_t *)&result)[2] = f.read();
+  ((uint8_t *)&result)[3] = f.read(); // MSB
+  return result;
+}
+
+void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y) {
+  File bmpFile;
+  int bmpWidth, bmpHeight;
+  uint8_t bmpDepth;
+  uint32_t bmpImageoffset;
+  uint8_t sdbuffer[3 * SCREEN_WIDTH]; // 3 * 128 = 384
+
+  if ((x >= display.width()) || (y >= display.height()))
+    return;
+
+  bmpFile = SPIFFS.open(filename, "r");
+  if (!bmpFile) {
+    Serial.print("File not found: ");
+    Serial.println(filename);
+    return;
+  }
+
+  // Parse BMP header
+  if (read16(bmpFile) != 0x4D42) {
+    Serial.println("Invalid BMP signature");
+    return;
+  }
+
+  read32(bmpFile); // File size
+  read32(bmpFile); // Creator
+  bmpImageoffset = read32(bmpFile);
+  read32(bmpFile); // Header size
+  bmpWidth = read32(bmpFile);
+  bmpHeight = read32(bmpFile);
+
+  if (read16(bmpFile) != 1) {
+    Serial.println("Unsupported BMP format (planes)");
+    return;
+  }
+
+  bmpDepth = read16(bmpFile);
+  if ((bmpDepth != 24) || (read32(bmpFile) != 0)) { // 24-bit, no compression
+    Serial.println("Unsupported BMP format (depth or compression)");
+    return;
+  }
+
+  // BMP rows are padded (if needed) to 4-byte boundary
+  uint32_t rowSize = (bmpWidth * 3 + 3) & ~3;
+
+  // If bmpHeight is negative, image is in top-down order.
+  // This is not common but has been observed in the wild.
+  bool flip = true;
+  if (bmpHeight < 0) {
+    bmpHeight = -bmpHeight;
+    flip = false;
+  }
+
+  // Crop area to be loaded
+  int w = bmpWidth;
+  int h = bmpHeight;
+  if ((x + w - 1) >= display.width())
+    w = display.width() - x;
+  if ((y + h - 1) >= display.height())
+    h = display.height() - y;
+
+  for (int j = 0; j < h; j++) {
+    int row = flip ? bmpHeight - 1 - j : j;
+    bmpFile.seek(bmpImageoffset + row * rowSize);
+    if (bmpFile.read(sdbuffer, sizeof(sdbuffer)) != sizeof(sdbuffer)) {
+      // Serial.println("file.read failed");
+    }
+    for (int i = 0; i < w; i++) {
+      // Convert 24-bit color to 1-bit for OLED
+      uint8_t r = sdbuffer[i * 3 + 2];
+      uint8_t g = sdbuffer[i * 3 + 1];
+      uint8_t b = sdbuffer[i * 3];
+      if ((r + g + b) > 128 * 3) {
+        display.drawPixel(x + i, y + j, SSD1306_WHITE);
+      }
+    }
+  }
+  bmpFile.close();
+}
+
 
 void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr){
     Serial.printf("A2DP connection state changed: %d\n", state);
