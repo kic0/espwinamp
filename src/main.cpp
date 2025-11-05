@@ -816,8 +816,8 @@ void handle_sample_playback() {
         return;
     }
 
-    // After 6 seconds, start playing the sound (if not already started)
-    if (millis() - splash_start_time >= 6000 && !sound_started) {
+    // After 5 seconds, start playing the sound (if not already started)
+    if (millis() - splash_start_time >= 5000 && !sound_started) {
         play_file("/sample.mp3", true);
         sound_started = true;
     }
