@@ -1,6 +1,7 @@
 #include "BtDiscoveryState.h"
 #include "AppContext.h"
 #include "ArtistSelectionState.h"
+#include "BtConnectingState.h"
 #include <SPIFFS.h>
 #include "pins.h"
 #include "Log.h"
@@ -51,7 +52,7 @@ State* BtDiscoveryState::handle_button_press(AppContext& context, bool is_short_
             esp_bt_gap_cancel_discovery();
             is_scanning = false;
             context.a2dp.connect_to(bt_devices[selected_bt_device].address);
-            return new ArtistSelectionState();
+            return new BtConnectingState();
         }
     }
     return nullptr;

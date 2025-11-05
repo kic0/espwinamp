@@ -18,7 +18,14 @@ Button button(BTN_SCROLL);
 
 StateManager* stateManager;
 AppContext* appContext;
-extern AppContext* appContext_Audio;
+AppContext* g_appContext = nullptr; // Global AppContext pointer
+
+void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr){
+    Log::printf("A2DP connection state changed: %d\n", state);
+    if (g_appContext) {
+        g_appContext->is_bt_connected = (state == ESP_A2D_CONNECTION_STATE_CONNECTED);
+    }
+}
 
 void setup() {
     Serial.begin(115200);
@@ -46,7 +53,7 @@ void setup() {
     button.begin();
 
     appContext = new AppContext(display, a2dp, button);
-    appContext_Audio = appContext;
+    g_appContext = appContext;
     stateManager = new StateManager(*appContext);
 
     if (SPIFFS.exists("/wifi_mode.txt")) {
@@ -54,6 +61,7 @@ void setup() {
         stateManager->setState(new SettingsState());
     } else {
         Log::printf("Booting into Bluetooth Mode\n");
+        a2dp.set_on_connection_state_changed(bt_connection_state_cb);
         a2dp.start("winamp");
         stateManager->setState(new BtDiscoveryState());
     }

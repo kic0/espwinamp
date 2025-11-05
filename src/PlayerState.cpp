@@ -6,6 +6,8 @@
 #include <MP3DecoderHelix.h>
 #include "Log.h"
 
+void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset);
+
 int32_t get_data_frames(Frame *frame, int32_t frame_count);
 int32_t get_wav_data_frames(Frame *frame, int32_t frame_count);
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref);
@@ -32,6 +34,12 @@ State* PlayerState::loop(AppContext& context) {
         play_song(context, context.current_playlist_files[context.current_song_index]);
     }
 
+    for (int i = 0; i < AppContext::MAX_MARQUEE_LINES; i++) {
+        if (context.is_marquee_active[i]) {
+            context.ui_dirty = true;
+            break;
+        }
+    }
     draw_player_ui(context);
     return nullptr;
 }
@@ -43,9 +51,7 @@ void PlayerState::exit(AppContext& context) {
 State* PlayerState::handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button) {
     if (is_scroll_button && is_short_press) {
         context.selected_song_in_player++;
-        if (context.selected_song_in_player >= context.current_playlist_files.size() + 1) {
-            context.selected_song_in_player = 0;
-        }
+        calculate_scroll_offset(context.selected_song_in_player, context.current_playlist_files.size() + 1, context.player_scroll_offset, 2);
         context.ui_dirty = true;
     } else if (is_scroll_button && !is_short_press) {
         if (context.selected_song_in_player == context.current_playlist_files.size()) {
@@ -94,17 +100,7 @@ void PlayerState::play_song(AppContext& context, Song song, unsigned long seek_p
 }
 
 void PlayerState::play_mp3(AppContext& context, String filename, unsigned long seek_position) {
-    if (context.audioFile) {
-        context.audioFile.close();
-    }
-    context.audioFile = SD.open(filename);
-    if (!context.audioFile) {
-        Serial.printf("Failed to open file: %s\n", filename.c_str());
-        return;
-    }
-    context.pcm_buffer_len = 0;
-    context.decoder.begin();
-    context.a2dp.set_data_callback_in_frames(get_data_frames);
+    play_file(context, filename, false, seek_position);
 }
 
 void PlayerState::play_wav(AppContext& context, String filename, unsigned long seek_position) {

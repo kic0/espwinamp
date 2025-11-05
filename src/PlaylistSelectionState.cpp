@@ -6,6 +6,8 @@
 #include "pins.h"
 #include "Log.h"
 
+void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset);
+
 void PlaylistSelectionState::enter(AppContext& context) {
     Log::printf("Entering Playlist Selection State\n");
     if (context.playlists.empty()) {
@@ -21,6 +23,12 @@ State* PlaylistSelectionState::loop(AppContext& context) {
         return handle_button_press(context, false, true);
     }
 
+    for (int i = 0; i < AppContext::MAX_MARQUEE_LINES; i++) {
+        if (context.is_marquee_active[i]) {
+            context.ui_dirty = true;
+            break;
+        }
+    }
     draw_playlist_ui(context);
     return nullptr;
 }
@@ -30,9 +38,7 @@ void PlaylistSelectionState::exit(AppContext& context) {}
 State* PlaylistSelectionState::handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button) {
     if (is_scroll_button && is_short_press) {
         context.selected_playlist++;
-        if (context.selected_playlist >= context.playlists.size() + 1) {
-            context.selected_playlist = 0;
-        }
+        calculate_scroll_offset(context.selected_playlist, context.playlists.size() + 1, context.playlist_scroll_offset, 2);
         context.ui_dirty = true;
     } else if (is_scroll_button && !is_short_press) {
         if (context.selected_playlist == context.playlists.size()) {

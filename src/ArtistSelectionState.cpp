@@ -6,6 +6,8 @@
 #include "pins.h"
 #include "Log.h"
 
+void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset);
+
 void ArtistSelectionState::enter(AppContext& context) {
     Log::printf("Entering Artist Selection State\n");
     if (context.artists.empty()) {
@@ -21,6 +23,12 @@ State* ArtistSelectionState::loop(AppContext& context) {
         return handle_button_press(context, false, true);
     }
 
+    for (int i = 0; i < AppContext::MAX_MARQUEE_LINES; i++) {
+        if (context.is_marquee_active[i]) {
+            context.ui_dirty = true;
+            break;
+        }
+    }
     draw_artist_ui(context);
     return nullptr;
 }
@@ -30,10 +38,7 @@ void ArtistSelectionState::exit(AppContext& context) {}
 State* ArtistSelectionState::handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button) {
     if (is_scroll_button && is_short_press) {
         context.selected_artist++;
-        if (context.selected_artist >= context.artists.size() + 1) {
-            context.selected_artist = 0;
-        }
-        // Simplified scrolling for now
+        calculate_scroll_offset(context.selected_artist, context.artists.size() + 1, context.artist_scroll_offset, 2);
         context.ui_dirty = true;
     } else if (is_scroll_button && !is_short_press) {
         if (context.selected_artist == context.artists.size()) {

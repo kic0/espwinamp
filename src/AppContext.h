@@ -50,9 +50,19 @@ public:
     int player_scroll_offset = 0;
 
     bool ui_dirty = true;
+    bool is_bt_connected = false;
+
+    // --- Marquee ---
+    static const int MAX_MARQUEE_LINES = 6;
+    bool is_marquee_active[MAX_MARQUEE_LINES] = {false};
+    unsigned long marquee_start_time[MAX_MARQUEE_LINES] = {0};
+    String marquee_text[MAX_MARQUEE_LINES];
 
     AppContext(Adafruit_SSD1306& d, BluetoothA2DPSource& a, Button& b)
         : display(d), a2dp(a), button(b) {}
 };
+
+void play_file(AppContext& context, String filename, bool from_spiffs, unsigned long seek_position = 0);
+void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t x, int16_t y);
 
 #endif // APP_CONTEXT_H
