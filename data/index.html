@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>ESPWinamp File Manager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body {
+    background-color: #212121;
+    color: #00FF00;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+  }
+  .winamp-container {
+    width: 90%;
+    max-width: 600px;
+    margin: 20px auto;
+    border: 2px solid #555;
+    background-color: #333;
+    box-shadow: 5px 5px 10px rgba(0,0,0,0.5);
+  }
+  .winamp-header {
+    background-color: #444;
+    color: #fff;
+    padding: 5px;
+    font-weight: bold;
+    cursor: move;
+  }
+  .winamp-body {
+    padding: 10px;
+  }
+  h2 {
+    color: #00FF00;
+    margin-top: 0;
+  }
+  ul {
+    list-style-type: none;
+    padding: 0;
+  }
+  li {
+    padding: 5px;
+    border-bottom: 1px solid #444;
+  }
+  li:last-child {
+    border-bottom: none;
+  }
+  a {
+    color: #00FF00;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  .delete-btn, .download-btn {
+    background-color: #555;
+    color: #00FF00;
+    border: 1px solid #00FF00;
+    cursor: pointer;
+    float: right;
+    margin-left: 5px;
+  }
+  .upload-form {
+    margin-top: 10px;
+    border-top: 1px solid #444;
+    padding-top: 10px;
+  }
+  input[type="file"], input[type="submit"] {
+    background-color: #555;
+    color: #00FF00;
+    border: 1px solid #00FF00;
+  }
+</style>
+</head>
+<body>
+
+<div class="winamp-container">
+  <div class="winamp-header">ESPWinamp File Manager</div>
+  <div class="winamp-body">
+    <h2>SD Card Contents</h2>
+    <ul id="file-list">
+      <!-- File list will be populated by JavaScript -->
+    </ul>
+    <div class="upload-form">
+      <h3>Upload File</h3>
+      <form id="upload-form" enctype="multipart/form-data">
+        <input type="file" name="upload" id="upload">
+        <input type="submit" value="Upload">
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const fileList = document.getElementById('file-list');
+    const uploadForm = document.getElementById('upload-form');
+
+    let currentPath = '/';
+
+    // Fetch and display file list
+    function getFiles(path) {
+      fetch(`/list?path=${path}`)
+        .then(response => response.json())
+        .then(data => {
+          fileList.innerHTML = '';
+          if (path !== '/') {
+            const li = document.createElement('li');
+            li.innerHTML = '<a href="#" class="folder-link" data-path="..">..</a>';
+            fileList.appendChild(li);
+          }
+          data.forEach(item => {
+            const li = document.createElement('li');
+
+            let itemHtml = '';
+            if (item.isDirectory) {
+                itemHtml += `<a href="#" class="folder-link" data-path="${item.name}">${item.name}</a> (dir)`;
+                itemHtml += `<button class="delete-btn" data-path="${item.name}" data-is-dir="true">Delete</button>`;
+            } else {
+                itemHtml += `<span>${item.name} - ${item.size}</span>`;
+                itemHtml += `<button class="delete-btn" data-path="${item.name}" data-is-dir="false">Delete</button>`;
+                itemHtml += `<a href="/download?path=${item.name}" class="download-btn">Download</a>`;
+            }
+
+            li.innerHTML = itemHtml;
+            fileList.appendChild(li);
+          });
+        });
+    }
+
+    // Handle file upload
+    uploadForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const formData = new FormData(this);
+      fetch('/upload', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.text())
+      .then(data => {
+        alert(data);
+        getFiles(); // Refresh file list
+      });
+    });
+
+    // Handle folder navigation
+    fileList.addEventListener('click', function(e) {
+      if (e.target.classList.contains('folder-link')) {
+        e.preventDefault();
+        const path = e.target.getAttribute('data-path');
+        if (path === '..') {
+          currentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+          if (currentPath === '') currentPath = '/';
+        } else {
+          currentPath = (currentPath === '/' ? '' : currentPath) + '/' + path;
+        }
+        getFiles(currentPath);
+      }
+    });
+
+    // Handle file deletion
+    fileList.addEventListener('click', function(e) {
+      if (e.target.classList.contains('delete-btn')) {
+        const path = e.target.getAttribute('data-path');
+        const isDir = e.target.getAttribute('data-is-dir') === 'true';
+        if (confirm(`Are you sure you want to delete ${path}?`)) {
+          fetch(`/delete?path=${currentPath === '/' ? '' : currentPath}/${path}&isDir=${isDir}`, {
+            method: 'DELETE'
+          })
+          .then(response => response.text())
+          .then(data => {
+            alert(data);
+            getFiles(currentPath); // Refresh file list
+          });
+        }
+      }
+    });
+
+    // Initial load
+    getFiles(currentPath);
+  });
+</script>
+
+</body>
+</html>
