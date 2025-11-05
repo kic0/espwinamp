@@ -4,12 +4,14 @@
 #include <SD.h>
 #include "pins.h"
 #include <MP3DecoderHelix.h>
+#include "Log.h"
 
 int32_t get_data_frames(Frame *frame, int32_t frame_count);
 int32_t get_wav_data_frames(Frame *frame, int32_t frame_count);
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref);
 
 void PlayerState::enter(AppContext& context) {
+    Log::printf("Entering Player State\n");
     context.decoder.begin();
     context.decoder.setDataCallback(pcm_data_callback);
     if (!context.current_playlist_files.empty()) {
@@ -18,24 +20,10 @@ void PlayerState::enter(AppContext& context) {
 }
 
 State* PlayerState::loop(AppContext& context) {
-    // Button handling
-    bool current_scroll = !digitalRead(BTN_SCROLL);
-    static bool scroll_pressed = false;
-    static unsigned long scroll_press_time = 0;
-    static bool scroll_long_press_triggered = false;
-
-    if (current_scroll && !scroll_pressed) {
-        scroll_pressed = true;
-        scroll_press_time = millis();
-        scroll_long_press_triggered = false;
-    } else if (!current_scroll && scroll_pressed) {
-        scroll_pressed = false;
-        if (!scroll_long_press_triggered) {
-            return handle_button_press(context, true, true);
-        }
-    }
-    if (scroll_pressed && !scroll_long_press_triggered && (millis() - scroll_press_time >= 1000)) {
-        scroll_long_press_triggered = true;
+    ButtonPress press = context.button.read();
+    if (press == SHORT_PRESS) {
+        return handle_button_press(context, true, true);
+    } else if (press == LONG_PRESS) {
         return handle_button_press(context, false, true);
     }
 

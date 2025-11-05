@@ -5,8 +5,10 @@
 #include <SD.h>
 #include "pins.h"
 #include "ArtistSelectionState.h"
+#include "Log.h"
 
 void SettingsState::enter(AppContext& context) {
+    Log::printf("Entering Settings State\n");
     // Read WiFi credentials
     File wifi_file = SPIFFS.open("/wifi_credentials.txt", "r");
     if (wifi_file) {
@@ -63,8 +65,12 @@ void SettingsState::enter(AppContext& context) {
         server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
             request->send(200, "text/plain", "File uploaded successfully");
         }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+            String path = "/";
+            if (request->hasParam("path")) {
+                path = request->getParam("path")->value();
+            }
             if(!index){
-                request->_tempFile = SD.open("/" + filename, "w");
+                request->_tempFile = SD.open(path + filename, "w");
             }
             if(len){
                 request->_tempFile.write(data, len);
@@ -110,24 +116,10 @@ void SettingsState::enter(AppContext& context) {
 }
 
 State* SettingsState::loop(AppContext& context) {
-    // Button handling
-    bool current_scroll = !digitalRead(BTN_SCROLL);
-    static bool scroll_pressed = false;
-    static unsigned long scroll_press_time = 0;
-    static bool scroll_long_press_triggered = false;
-
-    if (current_scroll && !scroll_pressed) {
-        scroll_pressed = true;
-        scroll_press_time = millis();
-        scroll_long_press_triggered = false;
-    } else if (!current_scroll && scroll_pressed) {
-        scroll_pressed = false;
-        if (!scroll_long_press_triggered) {
-            return handle_button_press(context, true, true);
-        }
-    }
-    if (scroll_pressed && !scroll_long_press_triggered && (millis() - scroll_press_time >= 1000)) {
-        scroll_long_press_triggered = true;
+    ButtonPress press = context.button.read();
+    if (press == SHORT_PRESS) {
+        return handle_button_press(context, true, true);
+    } else if (press == LONG_PRESS) {
         return handle_button_press(context, false, true);
     }
 

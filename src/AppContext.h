@@ -7,6 +7,7 @@
 #include <BluetoothA2DPSource.h>
 #include <MP3DecoderHelix.h>
 #include <SD.h>
+#include "Button.h"
 
 // Forward declaration
 class StateManager;
@@ -22,6 +23,7 @@ class AppContext {
 public:
     Adafruit_SSD1306& display;
     BluetoothA2DPSource& a2dp;
+    Button& button;
 
     // --- Audio System ---
     libhelix::MP3DecoderHelix decoder;
@@ -49,8 +51,8 @@ public:
 
     bool ui_dirty = true;
 
-    AppContext(Adafruit_SSD1306& d, BluetoothA2DPSource& a)
-        : display(d), a2dp(a) {}
+    AppContext(Adafruit_SSD1306& d, BluetoothA2DPSource& a, Button& b)
+        : display(d), a2dp(a), button(b) {}
 };
 
 #endif // APP_CONTEXT_H

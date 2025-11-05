@@ -9,9 +9,12 @@
 #include <SD.h>
 #include "pins.h"
 #include <Wire.h>
+#include "Button.h"
+#include "Log.h"
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 BluetoothA2DPSource a2dp;
+Button button(BTN_SCROLL);
 
 StateManager* stateManager;
 AppContext* appContext;
@@ -19,36 +22,51 @@ extern AppContext* appContext_Audio;
 
 void setup() {
     Serial.begin(115200);
+    Log::printf("--- ESPWinamp Starting ---\n");
 
+    Log::printf("Initializing Display...\n");
     Wire.begin(OLED_SDA, OLED_SCL);
     if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-        Serial.println(F("SSD1306 allocation failed"));
+        Log::printf("SSD1306 allocation failed\n");
         for(;;);
     }
 
+    Log::printf("Initializing SD Card...\n");
     if (!SD.begin(SD_CS)) {
-        Serial.println("Card Mount Failed");
+        Log::printf("Card Mount Failed\n");
         return;
     }
 
+    Log::printf("Initializing SPIFFS...\n");
     if(!SPIFFS.begin(true)){
-        Serial.println("An Error has occurred while mounting SPIFFS");
+        Log::printf("An Error has occurred while mounting SPIFFS\n");
         return;
     }
 
-    appContext = new AppContext(display, a2dp);
+    button.begin();
+
+    appContext = new AppContext(display, a2dp, button);
     appContext_Audio = appContext;
     stateManager = new StateManager(*appContext);
 
     if (SPIFFS.exists("/wifi_mode.txt")) {
+        Log::printf("Booting into WiFi Mode\n");
         stateManager->setState(new SettingsState());
     } else {
+        Log::printf("Booting into Bluetooth Mode\n");
         a2dp.start("winamp");
         stateManager->setState(new BtDiscoveryState());
     }
 }
 
 void loop() {
+    static unsigned long last_heap_log = 0;
+    if (millis() - last_heap_log > 2000) {
+        Log::printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
+                      ESP.getFreeHeap(), appContext->diag_sample_rate, appContext->diag_bits_per_sample, appContext->diag_channels);
+        last_heap_log = millis();
+    }
+
     stateManager->loop();
     delay(50);
 }

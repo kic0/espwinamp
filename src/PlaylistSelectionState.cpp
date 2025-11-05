@@ -4,32 +4,20 @@
 #include "PlayerState.h"
 #include <SD.h>
 #include "pins.h"
+#include "Log.h"
 
 void PlaylistSelectionState::enter(AppContext& context) {
+    Log::printf("Entering Playlist Selection State\n");
     if (context.playlists.empty()) {
         scan_playlists(context);
     }
 }
 
 State* PlaylistSelectionState::loop(AppContext& context) {
-    // Button handling
-    bool current_scroll = !digitalRead(BTN_SCROLL);
-    static bool scroll_pressed = false;
-    static unsigned long scroll_press_time = 0;
-    static bool scroll_long_press_triggered = false;
-
-    if (current_scroll && !scroll_pressed) {
-        scroll_pressed = true;
-        scroll_press_time = millis();
-        scroll_long_press_triggered = false;
-    } else if (!current_scroll && scroll_pressed) {
-        scroll_pressed = false;
-        if (!scroll_long_press_triggered) {
-            return handle_button_press(context, true, true);
-        }
-    }
-    if (scroll_pressed && !scroll_long_press_triggered && (millis() - scroll_press_time >= 1000)) {
-        scroll_long_press_triggered = true;
+    ButtonPress press = context.button.read();
+    if (press == SHORT_PRESS) {
+        return handle_button_press(context, true, true);
+    } else if (press == LONG_PRESS) {
         return handle_button_press(context, false, true);
     }
 
