@@ -24,9 +24,9 @@ struct DiscoveredBTDevice {
 std::vector<DiscoveredBTDevice> bt_devices;
 int selected_bt_device = 0;
 int bt_discovery_scroll_offset = 0;
-bool is_scanning = false;
-bool is_bt_connected = false;
-bool is_connecting = false;
+volatile bool is_scanning = false;
+volatile bool is_bt_connected = false;
+volatile bool is_connecting = false;
 unsigned long connection_start_time = 0;
 
 // ---------- Artists ----------
@@ -720,7 +720,7 @@ void attempt_auto_connect() {
     for (const auto& device : bt_devices) {
         if (memcmp(device.address, saved_addr, ESP_BD_ADDR_LEN) == 0) {
             Serial.printf("Saved device %s found in scan results. Attempting to connect...\n", addr_str.c_str());
-            delay(1000); // Allow a moment for any pending remote name requests to complete
+            esp_bt_gap_cancel_discovery();
             is_connecting = true;
             if (a2dp.connect_to(saved_addr)) {
                 connection_start_time = millis();
