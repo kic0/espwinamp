@@ -26,6 +26,7 @@ int selected_bt_device = 0;
 int bt_discovery_scroll_offset = 0;
 bool is_scanning = false;
 bool is_bt_connected = false;
+bool is_connecting = false;
 unsigned long connection_start_time = 0;
 
 // ---------- Artists ----------
@@ -498,6 +499,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 is_scanning = false;
 
                 // Connect to the device
+                is_connecting = true;
                 if (a2dp.connect_to(selected_device.address)) {
                     connection_start_time = millis();
                     // Save the address to SPIFFS
@@ -515,6 +517,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                     currentState = BT_CONNECTING;
                 } else {
                     Serial.println("Failed to connect.");
+                    is_connecting = false;
                     // Go back to scanning
                     is_scanning = false;
                 }
@@ -694,6 +697,9 @@ void get_bt_device_props(esp_bt_gap_cb_param_t *param) {
 }
 
 void attempt_auto_connect() {
+    if (is_connecting) {
+        return; // Don't try to auto-connect if we're already connecting
+    }
     File file = SPIFFS.open("/bt_address.txt", FILE_READ);
     if (!file) {
         Serial.println("No saved BT address found.");
@@ -715,12 +721,14 @@ void attempt_auto_connect() {
         if (memcmp(device.address, saved_addr, ESP_BD_ADDR_LEN) == 0) {
             Serial.printf("Saved device %s found in scan results. Attempting to connect...\n", addr_str.c_str());
             delay(1000); // Allow a moment for any pending remote name requests to complete
+            is_connecting = true;
             if (a2dp.connect_to(saved_addr)) {
                 connection_start_time = millis();
                 currentState = BT_CONNECTING;
                 return;
             } else {
                 Serial.println("Failed to connect to saved device.");
+                is_connecting = false;
                 is_scanning = false; // a new scan will start after the timeout
             }
         }
@@ -733,7 +741,7 @@ void handle_bt_discovery() {
     // a scan is throttled to once every 12 seconds
     static unsigned long last_scan_time = -12000;
 
-    if (!is_scanning && millis() - last_scan_time > 12000) {
+    if (!is_scanning && !is_connecting && millis() - last_scan_time > 12000) {
         Serial.println("Starting BT device discovery...");
         bt_devices.clear();
         selected_bt_device = 0; // a new scan is starting, lets reset the selection
@@ -759,6 +767,7 @@ void handle_bt_connecting() {
 
     if (is_bt_connected) {
         Serial.println("Connection established.");
+        is_connecting = false;
         a2dp.set_volume(64); // Set volume to 50%
         if (paused_song_index != -1) {
             currentState = PLAYER;
@@ -768,6 +777,7 @@ void handle_bt_connecting() {
     } else if (millis() - connection_start_time > 15000) { // 15 second timeout
         Serial.println("Connection timeout. Returning to discovery.");
         is_bt_connected = false;
+        is_connecting = false;
         currentState = BT_DISCOVERY;
     }
 }
