@@ -1,18 +1,19 @@
 # ESP32 Winamp MP3 Player
 
-This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD card for file storage, an OLED display for the UI, and physical buttons for control. The device acts as a Bluetooth A2DP source, streaming audio to a connected speaker or headphones.
+This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD card for file storage, an OLED display for the UI, and physical buttons for control. The device acts as a Bluetooth A2DP source, streaming audio to a connected speaker or headphones. The aim is to be cloud and algorythm independent, control and own your data, no ads, open hardware/software no BS.
 
 ## Features
 
-- **Winamp-Themed Bitmap Splash Screen:** Displays a custom `splash.bmp` image from the SPIFFS filesystem on startup.
-- **Bluetooth A2DP Source:** Streams MP3 and WAV audio to any A2DP-compatible speaker or headphones.
-- **Robust Reconnection Logic:** When the Bluetooth connection is lost, the device displays a "Reconnecting..." message and attempts to reconnect for 15 seconds before falling back to the device discovery screen.
+- **Bluetooth A2DP Source:** Streams audio to any A2DP-compatible speaker or headphones.
 - **SD Card Support:** Music is organized in an `Artist -> Album` folder structure on the SD card.
 - **OLED Display Interface:** A 128x64 SSD1306 OLED screen displays a Winamp-themed user interface.
 - **Single-Button Control:** All user input is handled by the single 'BOOT' button (GPIO 0), which supports short and long presses.
 - **State Machine Logic:** The application is built around a robust state machine that handles Bluetooth discovery, connection, and multiple playback states.
+- **Supports MP3 and WAV files:** Streams MP3 and WAV audio.
 - **Interactive "Now Playing" Screen:** While a song is playing, you can scroll through the current playlist and select a new song to play.
 - **Auto-Connect:** The device saves the MAC address of the last connected speaker and will attempt to auto-reconnect on the next boot.
+- **Robust Reconnection Logic:** When the Bluetooth connection is lost, the device displays a "Reconnecting..." message and attempts to reconnect for 15 seconds before falling back to the device discovery screen.
+- **Winamp-Themed Bitmap Splash Screen:** Displays a custom `splash.bmp` image from the SPIFFS filesystem on startup.
 - **PlatformIO Build System:** The project is built using PlatformIO, which automatically manages all dependencies.
 
 ## Hardware Requirements
@@ -116,7 +117,7 @@ You will be prompted to power-cycle the device during the erase process. Follow 
 
 
 
-### Disclamer 
+### Disclaimer 
 
 This software was developed with the help of AI LLM models, no warranty or support is to be expected.
 
@@ -125,4 +126,3 @@ If you feel like donating:
  XMR: 46hHveE5bAQHv6AE9bbYSJMsJupA2je1BFBUYLmMp899i2yMC8MEn35QiUEZiS2Scd5QGKFrcDk5yZCxL91Rtm9FAz44MMA 
  
  BTC: bc1qu8ykfkqp3t8l7k37fanznh8wj5wuewdmvwfrs2 
-
