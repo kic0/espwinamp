@@ -95,6 +95,7 @@ enum AppState {
   STARTUP,
   BT_DISCOVERY,
   BT_CONNECTING,
+  BT_RECONNECTING,
   SAMPLE_PLAYBACK,
   ARTIST_SELECTION,
   PLAYLIST_SELECTION,
@@ -280,6 +281,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button);
 void handle_startup();
 void handle_bt_discovery();
 void handle_bt_connecting();
+void handle_bt_reconnecting();
 void handle_sample_playback();
 void handle_artist_selection();
 void draw_artist_ui();
@@ -452,6 +454,9 @@ void loop() {
             break;
         case BT_CONNECTING:
             handle_bt_connecting();
+            break;
+        case BT_RECONNECTING:
+            handle_bt_reconnecting();
             break;
         case SAMPLE_PLAYBACK:
             handle_sample_playback();
@@ -786,6 +791,38 @@ void handle_bt_connecting() {
     }
 }
 
+void handle_bt_reconnecting() {
+    static unsigned long reconnect_start_time = 0;
+    if (reconnect_start_time == 0) {
+        reconnect_start_time = millis();
+    }
+
+    if (ui_dirty) {
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setTextColor(SSD1306_WHITE);
+        display.setCursor(0, 0);
+        display.println("Reconnecting...");
+        display.display();
+        ui_dirty = false;
+    }
+
+    if (is_bt_connected) {
+        Serial.println("Reconnection successful.");
+        reconnect_start_time = 0; // Reset for next time
+        currentState = PLAYER;
+        ui_dirty = true;
+    } else if (millis() - reconnect_start_time > 15000) { // 15 second timeout
+        Serial.println("Reconnection timeout. Returning to discovery.");
+        reconnect_start_time = 0; // Reset for next time
+        is_connecting = false;
+        a2dp.disconnect(); // try to kill any pending connection
+        currentState = BT_DISCOVERY;
+        ui_dirty = true;
+    }
+}
+
+
 void handle_sample_playback() {
     // Static variables are used here to maintain state across loop() calls.
     // They are initialized once when the function is first called and retain their values.
@@ -806,13 +843,13 @@ void handle_sample_playback() {
 
     // Check for BT disconnection
     if (!is_bt_connected) {
-        Serial.println("BT disconnected during sample playback. Returning to discovery.");
+        Serial.println("BT disconnected during sample playback. Entering reconnecting state.");
         if (audioFile) audioFile.close();
         // Reset state for next time
         splash_start_time = 0;
         sound_started = false;
-        artists.clear(); // Clear artist data
-        currentState = BT_DISCOVERY;
+        currentState = BT_RECONNECTING;
+        ui_dirty = true;
         return;
     }
 
@@ -1077,6 +1114,12 @@ void draw_artist_ui() {
 }
 
 void handle_artist_selection() {
+    if (!is_bt_connected) {
+        Serial.println("BT disconnected during artist selection. Entering reconnecting state.");
+        currentState = BT_RECONNECTING;
+        ui_dirty = true;
+        return;
+    }
     if (artists.empty()) {
         scan_artists();
     }
@@ -1127,6 +1170,12 @@ void draw_playlist_ui() {
 }
 
 void handle_playlist_selection() {
+    if (!is_bt_connected) {
+        Serial.println("BT disconnected during playlist selection. Entering reconnecting state.");
+        currentState = BT_RECONNECTING;
+        ui_dirty = true;
+        return;
+    }
     if (playlists.empty()) {
         scan_playlists(artists[selected_artist]);
     }
@@ -1293,8 +1342,7 @@ void play_song(Song song, unsigned long seek_position) {
 
 void handle_player() {
     if (!is_bt_connected) {
-        Serial.println("BT disconnected during playback. Returning to discovery.");
-        esp_bt_gap_cancel_discovery(); // a discovery might be running
+        Serial.println("BT disconnected during playback. Entering reconnecting state.");
         if (audioFile) {
             paused_song_index = current_song_index;
             paused_song_position = audioFile.position();
@@ -1304,8 +1352,7 @@ void handle_player() {
         decoder.end();
         song_started = false;
         is_playing = false;
-        artists.clear(); // Clear artist data
-        currentState = BT_DISCOVERY;
+        currentState = BT_RECONNECTING;
         ui_dirty = true;
         return;
     }
