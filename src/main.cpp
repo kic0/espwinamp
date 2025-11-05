@@ -738,6 +738,9 @@ void attempt_auto_connect() {
 }
 
 void handle_bt_discovery() {
+    if (is_connecting) {
+        return; // Don't start a new scan if we're already trying to connect
+    }
     // a scan is throttled to once every 12 seconds
     static unsigned long last_scan_time = -12000;
 
@@ -1340,5 +1343,6 @@ void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr){
         is_bt_connected = true;
     } else {
         is_bt_connected = false;
+        is_connecting = false; // Ensure we can scan again if disconnected
     }
 }
