@@ -24,8 +24,9 @@ struct DiscoveredBTDevice {
 std::vector<DiscoveredBTDevice> bt_devices;
 int selected_bt_device = 0;
 int bt_discovery_scroll_offset = 0;
-bool is_scanning = false;
-bool is_bt_connected = false;
+volatile bool is_scanning = false;
+volatile bool is_bt_connected = false;
+volatile bool is_connecting = false;
 unsigned long connection_start_time = 0;
 
 // ---------- Artists ----------
@@ -94,6 +95,7 @@ enum AppState {
   STARTUP,
   BT_DISCOVERY,
   BT_CONNECTING,
+  BT_RECONNECTING,
   SAMPLE_PLAYBACK,
   ARTIST_SELECTION,
   PLAYLIST_SELECTION,
@@ -279,6 +281,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button);
 void handle_startup();
 void handle_bt_discovery();
 void handle_bt_connecting();
+void handle_bt_reconnecting();
 void handle_sample_playback();
 void handle_artist_selection();
 void draw_artist_ui();
@@ -290,6 +293,7 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position = 
 void play_wav(String filename, unsigned long seek_position = 0);
 void play_mp3(String filename, unsigned long seek_position = 0);
 void play_song(Song song, unsigned long seek_position = 0);
+void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y);
 
 void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset) {
     if (selected_item >= item_count) {
@@ -451,6 +455,9 @@ void loop() {
         case BT_CONNECTING:
             handle_bt_connecting();
             break;
+        case BT_RECONNECTING:
+            handle_bt_reconnecting();
+            break;
         case SAMPLE_PLAYBACK:
             handle_sample_playback();
             break;
@@ -498,6 +505,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 is_scanning = false;
 
                 // Connect to the device
+                is_connecting = true;
                 if (a2dp.connect_to(selected_device.address)) {
                     connection_start_time = millis();
                     // Save the address to SPIFFS
@@ -515,6 +523,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                     currentState = BT_CONNECTING;
                 } else {
                     Serial.println("Failed to connect.");
+                    is_connecting = false;
                     // Go back to scanning
                     is_scanning = false;
                 }
@@ -694,6 +703,9 @@ void get_bt_device_props(esp_bt_gap_cb_param_t *param) {
 }
 
 void attempt_auto_connect() {
+    if (is_connecting) {
+        return; // Don't try to auto-connect if we're already connecting
+    }
     File file = SPIFFS.open("/bt_address.txt", FILE_READ);
     if (!file) {
         Serial.println("No saved BT address found.");
@@ -714,13 +726,15 @@ void attempt_auto_connect() {
     for (const auto& device : bt_devices) {
         if (memcmp(device.address, saved_addr, ESP_BD_ADDR_LEN) == 0) {
             Serial.printf("Saved device %s found in scan results. Attempting to connect...\n", addr_str.c_str());
-            delay(1000); // Allow a moment for any pending remote name requests to complete
+            esp_bt_gap_cancel_discovery();
+            is_connecting = true;
             if (a2dp.connect_to(saved_addr)) {
                 connection_start_time = millis();
                 currentState = BT_CONNECTING;
                 return;
             } else {
                 Serial.println("Failed to connect to saved device.");
+                is_connecting = false;
                 is_scanning = false; // a new scan will start after the timeout
             }
         }
@@ -730,10 +744,13 @@ void attempt_auto_connect() {
 }
 
 void handle_bt_discovery() {
+    if (is_connecting) {
+        return; // Don't start a new scan if we're already trying to connect
+    }
     // a scan is throttled to once every 12 seconds
     static unsigned long last_scan_time = -12000;
 
-    if (!is_scanning && millis() - last_scan_time > 12000) {
+    if (!is_scanning && !is_connecting && millis() - last_scan_time > 12000) {
         Serial.println("Starting BT device discovery...");
         bt_devices.clear();
         selected_bt_device = 0; // a new scan is starting, lets reset the selection
@@ -759,6 +776,7 @@ void handle_bt_connecting() {
 
     if (is_bt_connected) {
         Serial.println("Connection established.");
+        is_connecting = false;
         a2dp.set_volume(64); // Set volume to 50%
         if (paused_song_index != -1) {
             currentState = PLAYER;
@@ -768,9 +786,42 @@ void handle_bt_connecting() {
     } else if (millis() - connection_start_time > 15000) { // 15 second timeout
         Serial.println("Connection timeout. Returning to discovery.");
         is_bt_connected = false;
+        is_connecting = false;
         currentState = BT_DISCOVERY;
     }
 }
+
+void handle_bt_reconnecting() {
+    static unsigned long reconnect_start_time = 0;
+    if (reconnect_start_time == 0) {
+        reconnect_start_time = millis();
+    }
+
+    if (ui_dirty) {
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setTextColor(SSD1306_WHITE);
+        display.setCursor(0, 0);
+        display.println("Reconnecting...");
+        display.display();
+        ui_dirty = false;
+    }
+
+    if (is_bt_connected) {
+        Serial.println("Reconnection successful.");
+        reconnect_start_time = 0; // Reset for next time
+        currentState = PLAYER;
+        ui_dirty = true;
+    } else if (millis() - reconnect_start_time > 15000) { // 15 second timeout
+        Serial.println("Reconnection timeout. Returning to discovery.");
+        reconnect_start_time = 0; // Reset for next time
+        is_connecting = false;
+        a2dp.disconnect(); // try to kill any pending connection
+        currentState = BT_DISCOVERY;
+        ui_dirty = true;
+    }
+}
+
 
 void handle_sample_playback() {
     // Static variables are used here to maintain state across loop() calls.
@@ -786,27 +837,24 @@ void handle_sample_playback() {
 
         // Display splash screen
         display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(SSD1306_WHITE);
-        display.setCursor(25, 25);
-        display.println("Winamp");
+        draw_bitmap_from_spiffs("/splash.bmp", 10, 0);
         display.display();
     }
 
     // Check for BT disconnection
     if (!is_bt_connected) {
-        Serial.println("BT disconnected during sample playback. Returning to discovery.");
+        Serial.println("BT disconnected during sample playback. Entering reconnecting state.");
         if (audioFile) audioFile.close();
         // Reset state for next time
         splash_start_time = 0;
         sound_started = false;
-        artists.clear(); // Clear artist data
-        currentState = BT_DISCOVERY;
+        currentState = BT_RECONNECTING;
+        ui_dirty = true;
         return;
     }
 
-    // After 6 seconds, start playing the sound (if not already started)
-    if (millis() - splash_start_time >= 6000 && !sound_started) {
+    // After 5 seconds, start playing the sound (if not already started)
+    if (millis() - splash_start_time >= 5000 && !sound_started) {
         play_file("/sample.mp3", true);
         sound_started = true;
     }
@@ -1066,6 +1114,12 @@ void draw_artist_ui() {
 }
 
 void handle_artist_selection() {
+    if (!is_bt_connected) {
+        Serial.println("BT disconnected during artist selection. Entering reconnecting state.");
+        currentState = BT_RECONNECTING;
+        ui_dirty = true;
+        return;
+    }
     if (artists.empty()) {
         scan_artists();
     }
@@ -1116,6 +1170,12 @@ void draw_playlist_ui() {
 }
 
 void handle_playlist_selection() {
+    if (!is_bt_connected) {
+        Serial.println("BT disconnected during playlist selection. Entering reconnecting state.");
+        currentState = BT_RECONNECTING;
+        ui_dirty = true;
+        return;
+    }
     if (playlists.empty()) {
         scan_playlists(artists[selected_artist]);
     }
@@ -1282,8 +1342,7 @@ void play_song(Song song, unsigned long seek_position) {
 
 void handle_player() {
     if (!is_bt_connected) {
-        Serial.println("BT disconnected during playback. Returning to discovery.");
-        esp_bt_gap_cancel_discovery(); // a discovery might be running
+        Serial.println("BT disconnected during playback. Entering reconnecting state.");
         if (audioFile) {
             paused_song_index = current_song_index;
             paused_song_position = audioFile.position();
@@ -1293,8 +1352,8 @@ void handle_player() {
         decoder.end();
         song_started = false;
         is_playing = false;
-        artists.clear(); // Clear artist data
-        currentState = BT_DISCOVERY;
+        currentState = BT_RECONNECTING;
+        ui_dirty = true;
         return;
     }
 
@@ -1324,11 +1383,110 @@ void handle_player() {
     draw_player_ui();
 }
 
+// Helper function to read a 16-bit value from a file
+uint16_t read16(File &f) {
+  uint16_t result;
+  ((uint8_t *)&result)[0] = f.read(); // LSB
+  ((uint8_t *)&result)[1] = f.read(); // MSB
+  return result;
+}
+
+// Helper function to read a 32-bit value from a file
+uint32_t read32(File &f) {
+  uint32_t result;
+  ((uint8_t *)&result)[0] = f.read(); // LSB
+  ((uint8_t *)&result)[1] = f.read();
+  ((uint8_t *)&result)[2] = f.read();
+  ((uint8_t *)&result)[3] = f.read(); // MSB
+  return result;
+}
+
+void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y) {
+  File bmpFile;
+  int bmpWidth, bmpHeight;
+  uint8_t bmpDepth;
+  uint32_t bmpImageoffset;
+  uint8_t sdbuffer[3 * SCREEN_WIDTH]; // 3 * 128 = 384
+
+  if ((x >= display.width()) || (y >= display.height()))
+    return;
+
+  bmpFile = SPIFFS.open(filename, "r");
+  if (!bmpFile) {
+    Serial.print("File not found: ");
+    Serial.println(filename);
+    return;
+  }
+
+  // Parse BMP header
+  if (read16(bmpFile) != 0x4D42) {
+    Serial.println("Invalid BMP signature");
+    return;
+  }
+
+  read32(bmpFile); // File size
+  read32(bmpFile); // Creator
+  bmpImageoffset = read32(bmpFile);
+  read32(bmpFile); // Header size
+  bmpWidth = read32(bmpFile);
+  bmpHeight = read32(bmpFile);
+
+  if (read16(bmpFile) != 1) {
+    Serial.println("Unsupported BMP format (planes)");
+    return;
+  }
+
+  bmpDepth = read16(bmpFile);
+  if ((bmpDepth != 24) || (read32(bmpFile) != 0)) { // 24-bit, no compression
+    Serial.println("Unsupported BMP format (depth or compression)");
+    return;
+  }
+
+  // BMP rows are padded (if needed) to 4-byte boundary
+  uint32_t rowSize = (bmpWidth * 3 + 3) & ~3;
+
+  // If bmpHeight is negative, image is in top-down order.
+  // This is not common but has been observed in the wild.
+  bool flip = true;
+  if (bmpHeight < 0) {
+    bmpHeight = -bmpHeight;
+    flip = false;
+  }
+
+  // Crop area to be loaded
+  int w = bmpWidth;
+  int h = bmpHeight;
+  if ((x + w - 1) >= display.width())
+    w = display.width() - x;
+  if ((y + h - 1) >= display.height())
+    h = display.height() - y;
+
+  for (int j = 0; j < h; j++) {
+    int row = flip ? bmpHeight - 1 - j : j;
+    bmpFile.seek(bmpImageoffset + row * rowSize);
+    if (bmpFile.read(sdbuffer, sizeof(sdbuffer)) != sizeof(sdbuffer)) {
+      // Serial.println("file.read failed");
+    }
+    for (int i = 0; i < w; i++) {
+      // Convert 24-bit color to 1-bit for OLED
+      uint8_t r = sdbuffer[i * 3 + 2];
+      uint8_t g = sdbuffer[i * 3 + 1];
+      uint8_t b = sdbuffer[i * 3];
+      if ((r + g + b) > 128 * 3) {
+        display.drawPixel(x + i, y + j, SSD1306_WHITE);
+      }
+    }
+  }
+  bmpFile.close();
+}
+
+
 void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr){
     Serial.printf("A2DP connection state changed: %d\n", state);
     if (state == ESP_A2D_CONNECTION_STATE_CONNECTED) {
         is_bt_connected = true;
     } else {
         is_bt_connected = false;
+        is_connecting = false; // Ensure we can scan again if disconnected
     }
 }
