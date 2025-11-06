@@ -12,6 +12,7 @@
 #include <Wire.h>
 #include "Button.h"
 #include "Log.h"
+#include "UI.h"
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 BluetoothA2DPSource a2dp;
@@ -86,5 +87,6 @@ void loop() {
     }
 
     stateManager->loop();
+    draw_current_state_ui(*appContext, stateManager);
     delay(50);
 }

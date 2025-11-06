@@ -11,6 +11,7 @@ public:
     void enter(AppContext& context) override;
     State* loop(AppContext& context) override;
     void exit(AppContext& context) override;
+    StateType getType() const override { return StateType::SETTINGS; }
 
 private:
     AsyncWebServer server;

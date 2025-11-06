@@ -5,14 +5,15 @@
 #include "AppContext.h"
 
 class StateManager {
-private:
-    State* currentState;
-    AppContext& context;
-
 public:
     StateManager(AppContext& ctx);
     void setState(State* newState);
     void loop();
+    State* getCurrentState() { return currentState; }
+
+private:
+    State* currentState;
+    AppContext& context;
 };
 
 #endif // STATE_MANAGER_H

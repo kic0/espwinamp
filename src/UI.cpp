@@ -2,6 +2,10 @@
 #include "AppContext.h"
 #include "icons.h"
 #include <SPIFFS.h>
+#include "StateManager.h"
+#include "ArtistSelectionState.h"
+#include "PlaylistSelectionState.h"
+#include "PlayerState.h"
 
 void draw_header(AppContext& context, const String& title) {
     context.display.fillRect(0, 0, 128, 12, SSD1306_WHITE);
@@ -256,4 +260,24 @@ void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t 
   }
 
   file.close();
+}
+
+void draw_current_state_ui(AppContext& context, StateManager* stateManager) {
+    State* currentState = stateManager->getCurrentState();
+    if (!currentState) return;
+
+    switch (currentState->getType()) {
+        case StateType::ARTIST_SELECTION:
+            draw_artist_ui(context);
+            break;
+        case StateType::PLAYLIST_SELECTION:
+            draw_playlist_ui(context);
+            break;
+        case StateType::PLAYER:
+            draw_player_ui(context);
+            break;
+        default:
+            // Other states draw their own UI
+            break;
+    }
 }
