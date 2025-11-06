@@ -54,7 +54,7 @@ void draw_player_ui(AppContext& context) {
         context.display.setCursor(110, 16);
         context.display.print(context.a2dp.get_volume());
 
-        if (context.a2dp.is_playing()) {
+        if (context.a2dp.get_audio_state() == ESP_A2D_AUDIO_STATE_STARTED) {
             context.display.drawBitmap(100, 26, play_icon, 8, 6, SSD1306_WHITE);
         } else {
             context.display.drawBitmap(100, 26, pause_icon, 8, 6, SSD1306_WHITE);

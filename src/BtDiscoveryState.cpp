@@ -1,6 +1,8 @@
 #include "BtDiscoveryState.h"
 #include "AppContext.h"
 #include "ArtistSelectionState.h"
+
+extern AppContext* g_appContext;
 #include "BtConnectingState.h"
 #include <SPIFFS.h>
 #include "pins.h"
@@ -115,7 +117,9 @@ void BtDiscoveryState::esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_
             }
         }
         if (!found) {
+            Log::printf("Found new device: %s\n", new_device.name.c_str());
             bt_devices.push_back(new_device);
+            g_appContext->ui_dirty = true;
         }
     } else if (event == ESP_BT_GAP_DISC_STATE_CHANGED_EVT) {
         if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
