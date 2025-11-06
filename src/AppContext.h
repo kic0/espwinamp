@@ -50,6 +50,7 @@ public:
     int current_song_index = 0;
     int selected_song_in_player = 0;
     int player_scroll_offset = 0;
+    unsigned long playback_position = 0;
 
     esp_bd_addr_t peer_address;
     bool ui_dirty = true;

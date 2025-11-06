@@ -15,6 +15,7 @@ void SamplePlaybackState::enter(AppContext& context) {
     Log::printf("Drawing splash screen...\n");
     draw_bitmap_from_spiffs(context, "/splash.bmp", 10, 0);
     context.display.display();
+    context.ui_dirty = true;
 }
 
 State* SamplePlaybackState::loop(AppContext& context) {

@@ -4,6 +4,7 @@
 #include "BtDiscoveryState.h"
 #include "SettingsState.h"
 #include "BtConnectingState.h"
+#include "BtAutoConnectingState.h"
 #include <Adafruit_SSD1306.h>
 #include <BluetoothA2DPSource.h>
 #include <SPIFFS.h>
@@ -25,6 +26,13 @@ void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr){
     Log::printf("A2DP connection state changed: %d\n", state);
     if (g_appContext) {
         g_appContext->is_bt_connected = (state == ESP_A2D_CONNECTION_STATE_CONNECTED);
+        if (state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
+            if (g_appContext->audioFile) {
+                g_appContext->playback_position = g_appContext->audioFile.position();
+                g_appContext->audioFile.close();
+            }
+            stateManager->setState(new BtDiscoveryState());
+        }
     }
 }
 
@@ -71,10 +79,9 @@ void setup() {
                 String mac_str = file.readString();
                 file.close();
                 Log::printf("Found saved BT address: %s\n", mac_str.c_str());
-                esp_bd_addr_t addr;
-                sscanf(mac_str.c_str(), "%02x:%02x:%02x:%02x:%02x:%02x", &addr[0], &addr[1], &addr[2], &addr[3], &addr[4], &addr[5]);
-                a2dp.connect_to(addr);
-                stateManager->setState(new BtConnectingState());
+                sscanf(mac_str.c_str(), "%02x:%02x:%02x:%02x:%02x:%02x", &appContext->peer_address[0], &appContext->peer_address[1], &appContext->peer_address[2], &appContext->peer_address[3], &appContext->peer_address[4], &appContext->peer_address[5]);
+                a2dp.connect_to(appContext->peer_address);
+                stateManager->setState(new BtAutoConnectingState());
             }
         } else {
             stateManager->setState(new BtDiscoveryState());

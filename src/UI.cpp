@@ -183,38 +183,61 @@ void draw_playlist_ui(AppContext& context) {
 void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t x, int16_t y) {
   File file = SPIFFS.open(filename, "r");
   if (!file) {
-    Serial.println("Failed to open file for reading");
+    Serial.print(F("Failed to open "));
+    Serial.println(filename);
     return;
   }
 
-  // Parse BMP header
-  file.seek(10);
+  // BMP header validation
+  if (file.read() != 'B' || file.read() != 'M') {
+    Serial.println(F("Not a BMP file"));
+    file.close();
+    return;
+  }
+
+  // Seek to known locations for metadata
+  file.seek(10); // Data offset
   uint32_t dataOffset;
   file.read((uint8_t*)&dataOffset, 4);
 
-  file.seek(18);
+  file.seek(18); // Width & height
   int32_t width, height;
   file.read((uint8_t*)&width, 4);
   file.read((uint8_t*)&height, 4);
 
-  file.seek(28);
+  file.seek(28); // Bits per pixel
   uint16_t bpp;
   file.read((uint8_t*)&bpp, 2);
 
-  // Only support 1-bit BMPs
-  if (bpp == 1) {
-    file.seek(dataOffset);
-    uint8_t buffer[width];
-    for (int16_t j = 0; j < height; j++) {
-      file.read(buffer, width / 8);
-      for (int16_t i = 0; i < width; i++) {
-        if (buffer[i / 8] & (128 >> (i % 8))) {
-          context.display.drawPixel(x + i, y + j, SSD1306_WHITE);
-        } else {
-          context.display.drawPixel(x + i, y + j, SSD1306_BLACK);
-        }
-      }
-    }
+  if (bpp != 1) {
+    Serial.print(F("Unsupported BMP format: "));
+    Serial.print(bpp);
+    Serial.println(F(" bpp"));
+    file.close();
+    return;
   }
+
+  // BMPs are stored bottom-up, and rows are padded to a 4-byte boundary.
+  uint32_t rowSize = (width + 31) / 32 * 4;
+  uint8_t lineBuffer[rowSize];
+
+  file.seek(dataOffset);
+
+  for (int16_t j = 0; j < height; j++) {
+      // The BMP is stored bottom-up, so we draw from the bottom of the target area upwards.
+      int16_t dest_y = y + (height - 1 - j);
+
+      file.read(lineBuffer, rowSize);
+
+      for (int16_t i = 0; i < width; i++) {
+          // Unpack pixels from the buffer. The MSB is the first pixel.
+          if ((lineBuffer[i / 8] << (i % 8)) & 0x80) {
+              context.display.drawPixel(x + i, dest_y, SSD1306_WHITE);
+          } else {
+              context.display.drawPixel(x + i, dest_y, SSD1306_BLACK);
+          }
+      }
+  }
+
   file.close();
 }
