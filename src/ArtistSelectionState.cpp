@@ -36,7 +36,10 @@ void ArtistSelectionState::exit(AppContext& context) {}
 
 State* ArtistSelectionState::handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button) {
     if (is_scroll_button && is_short_press) {
-        context.selected_artist = (context.selected_artist + 1) % (context.artists.size() + 1);
+        context.selected_artist++;
+        if (context.selected_artist > context.artists.size()) {
+            context.selected_artist = 0;
+        }
         context.ui_dirty = true;
     } else if (is_scroll_button && !is_short_press) {
         if (context.selected_artist == context.artists.size()) {

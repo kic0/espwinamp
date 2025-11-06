@@ -3,6 +3,7 @@
 #include "StateManager.h"
 #include "BtDiscoveryState.h"
 #include "SettingsState.h"
+#include "BtConnectingState.h"
 #include <Adafruit_SSD1306.h>
 #include <BluetoothA2DPSource.h>
 #include <SPIFFS.h>
@@ -63,7 +64,21 @@ void setup() {
         Log::printf("Booting into Bluetooth Mode\n");
         a2dp.set_on_connection_state_changed(bt_connection_state_cb);
         a2dp.start("winamp");
-        stateManager->setState(new BtDiscoveryState());
+
+        if (SPIFFS.exists("/data/bt_address.txt")) {
+            File file = SPIFFS.open("/data/bt_address.txt", "r");
+            if (file) {
+                String mac_str = file.readString();
+                file.close();
+                Log::printf("Found saved BT address: %s\n", mac_str.c_str());
+                esp_bd_addr_t addr;
+                sscanf(mac_str.c_str(), "%02x:%02x:%02x:%02x:%02x:%02x", &addr[0], &addr[1], &addr[2], &addr[3], &addr[4], &addr[5]);
+                a2dp.connect_to(addr);
+                stateManager->setState(new BtConnectingState());
+            }
+        } else {
+            stateManager->setState(new BtDiscoveryState());
+        }
     }
 }
 

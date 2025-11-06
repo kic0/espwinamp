@@ -36,7 +36,10 @@ void PlaylistSelectionState::exit(AppContext& context) {}
 
 State* PlaylistSelectionState::handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button) {
     if (is_scroll_button && is_short_press) {
-        context.selected_playlist = (context.selected_playlist + 1) % (context.playlists.size() + 1);
+        context.selected_playlist++;
+        if (context.selected_playlist > context.playlists.size()) {
+            context.selected_playlist = 0;
+        }
         context.ui_dirty = true;
     } else if (is_scroll_button && !is_short_press) {
         if (context.selected_playlist == context.playlists.size()) {

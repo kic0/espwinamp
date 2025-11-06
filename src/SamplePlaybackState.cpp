@@ -12,12 +12,15 @@ void SamplePlaybackState::enter(AppContext& context) {
     Log::printf("Entering Sample Playback State\n");
     start_time = millis();
     context.display.clearDisplay();
+    Log::printf("Drawing splash screen...\n");
     draw_bitmap_from_spiffs(context, "/splash.bmp", 10, 0);
     context.display.display();
 }
 
 State* SamplePlaybackState::loop(AppContext& context) {
+    Log::printf("SamplePlaybackState::loop\n");
     if (millis() - start_time >= 5000 && !context.audioFile) {
+        Log::printf("Playing sample.mp3...\n");
         play_file(context, "/sample.mp3", true);
     }
 

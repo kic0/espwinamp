@@ -49,7 +49,10 @@ void PlayerState::exit(AppContext& context) {
 
 State* PlayerState::handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button) {
     if (is_scroll_button && is_short_press) {
-        context.selected_song_in_player = (context.selected_song_in_player + 1) % (context.current_playlist_files.size() + 1);
+        context.selected_song_in_player++;
+        if (context.selected_song_in_player > context.current_playlist_files.size()) {
+            context.selected_song_in_player = 0;
+        }
         context.ui_dirty = true;
     } else if (is_scroll_button && !is_short_press) {
         if (context.selected_song_in_player == context.current_playlist_files.size()) {

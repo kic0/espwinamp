@@ -104,6 +104,7 @@ void BtDiscoveryState::esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_
             }
         }
         if (name == NULL) {
+            esp_bt_gap_read_remote_name(param->disc_res.bda);
             char bda_str[18];
             sprintf(bda_str, "%02x:%02x:%02x:%02x:%02x:%02x", param->disc_res.bda[0], param->disc_res.bda[1], param->disc_res.bda[2], param->disc_res.bda[3], param->disc_res.bda[4], param->disc_res.bda[5]);
             new_device.name = String(bda_str);
@@ -124,6 +125,16 @@ void BtDiscoveryState::esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_
     } else if (event == ESP_BT_GAP_DISC_STATE_CHANGED_EVT) {
         if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
             is_scanning = false;
+        }
+    } else if (event == ESP_BT_GAP_READ_REMOTE_NAME_EVT) {
+        if (param->read_rmt_name.stat == ESP_BT_STATUS_SUCCESS) {
+            for (auto& dev : bt_devices) {
+                if (memcmp(dev.address, param->read_rmt_name.bda, ESP_BD_ADDR_LEN) == 0) {
+                    dev.name = String((char*)param->read_rmt_name.rmt_name);
+                    g_appContext->ui_dirty = true;
+                    break;
+                }
+            }
         }
     }
 }
