@@ -1,32 +1,50 @@
 #include "BtDiscoveryState.h"
 #include "AppContext.h"
 #include "ArtistSelectionState.h"
+#include "BtConnectingState.h"
+#include "Log.h"
+#include "pins.h"
+#include "StateManager.h"
+#include <SPIFFS.h>
 
 extern AppContext* g_appContext;
-#include "BtConnectingState.h"
-#include <SPIFFS.h>
-#include "pins.h"
-#include "Log.h"
+extern StateManager* g_stateManager;
 
 std::vector<DiscoveredBTDevice> BtDiscoveryState::bt_devices;
 int BtDiscoveryState::selected_bt_device = 0;
-int BtDiscoveryState::bt_discovery_scroll_offset = 0;
 volatile bool BtDiscoveryState::is_scanning = false;
+esp_bd_addr_t saved_address;
+bool has_saved_address = false;
 
 void BtDiscoveryState::enter(AppContext& context) {
     Log::printf("Entering BT Discovery State\n");
     esp_bt_gap_register_callback(esp_bt_gap_cb);
+
+    // Try to read saved address
+    has_saved_address = false;
+    File file = SPIFFS.open("/data/bt_address.txt", "r");
+    if (file) {
+        String addr_str = file.readString();
+        file.close();
+        if (addr_str.length() == 17) {
+            sscanf(addr_str.c_str(), "%02x:%02x:%02x:%02x:%02x:%02x",
+                   &saved_address[0], &saved_address[1], &saved_address[2],
+                   &saved_address[3], &saved_address[4], &saved_address[5]);
+            has_saved_address = true;
+            Log::printf("Loaded saved BT address: %s\n", addr_str.c_str());
+        }
+    }
 }
 
 State* BtDiscoveryState::loop(AppContext& context) {
     ButtonPress press = context.button.read();
     if (press == SHORT_PRESS) {
-        return handle_button_press(context, true, true);
+        return handle_button_press(context, true);
     } else if (press == LONG_PRESS) {
-        return handle_button_press(context, false, true);
+        return handle_button_press(context, false);
     }
 
-    // Start scanning
+    // Start scanning periodically
     static unsigned long last_scan_time = -12000;
     if (!is_scanning && millis() - last_scan_time > 12000) {
         bt_devices.clear();
@@ -40,16 +58,15 @@ State* BtDiscoveryState::loop(AppContext& context) {
     return nullptr;
 }
 
-void BtDiscoveryState::exit(AppContext& context) {}
+void BtDiscoveryState::exit(AppContext& context) {
+    // esp_bt_gap_register_callback(nullptr); // Deregister to avoid conflicts
+}
 
-State* BtDiscoveryState::handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button) {
-    if (is_scroll_button && is_short_press) {
-        selected_bt_device++;
-        if (selected_bt_device >= bt_devices.size()) {
-            selected_bt_device = 0;
-        }
+State* BtDiscoveryState::handle_button_press(AppContext& context, bool is_short_press) {
+    if (is_short_press) {
+        selected_bt_device = (selected_bt_device + 1) % (bt_devices.size() > 0 ? bt_devices.size() : 1);
         context.ui_dirty = true;
-    } else if (is_scroll_button && !is_short_press) {
+    } else { // Long press
         if (!bt_devices.empty()) {
             esp_bt_gap_cancel_discovery();
             is_scanning = false;
@@ -74,7 +91,7 @@ void BtDiscoveryState::draw_bt_discovery_ui(AppContext& context) {
 
     if (bt_devices.empty()) {
         context.display.setCursor(0, 26);
-        context.display.print("Scanning...");
+        context.display.print(is_scanning ? "Scanning..." : "No devices found");
     } else {
         for (int i = 0; i < bt_devices.size() && i < 4; i++) {
             int y_pos = 26 + i * 10;
@@ -123,6 +140,17 @@ void BtDiscoveryState::esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_
             bt_devices.push_back(new_device);
             g_appContext->ui_dirty = true;
         }
+
+        // Auto-connect if this is the saved device
+        if (has_saved_address && memcmp(new_device.address, saved_address, ESP_BD_ADDR_LEN) == 0) {
+            Log::printf("Found saved device. Attempting to connect...\n");
+            esp_bt_gap_cancel_discovery();
+            is_scanning = false;
+            memcpy(g_appContext->peer_address, saved_address, ESP_BD_ADDR_LEN);
+            g_appContext->a2dp.connect_to(g_appContext->peer_address);
+            g_stateManager->setState(new BtConnectingState());
+        }
+
     } else if (event == ESP_BT_GAP_DISC_STATE_CHANGED_EVT) {
         if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
             is_scanning = false;

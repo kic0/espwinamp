@@ -4,7 +4,6 @@
 #include "BtDiscoveryState.h"
 #include "SettingsState.h"
 #include "BtConnectingState.h"
-#include "BtAutoConnectingState.h"
 #include <Adafruit_SSD1306.h>
 #include <BluetoothA2DPSource.h>
 #include <SPIFFS.h>
@@ -19,6 +18,7 @@ BluetoothA2DPSource a2dp;
 Button button(BTN_SCROLL);
 
 StateManager* stateManager;
+StateManager* g_stateManager = nullptr; // Global StateManager pointer
 AppContext* appContext;
 AppContext* g_appContext = nullptr; // Global AppContext pointer
 
@@ -64,6 +64,7 @@ void setup() {
     appContext = new AppContext(display, a2dp, button);
     g_appContext = appContext;
     stateManager = new StateManager(*appContext);
+    g_stateManager = stateManager;
 
     if (SPIFFS.exists("/wifi_mode.txt")) {
         Log::printf("Booting into WiFi Mode\n");
@@ -72,20 +73,7 @@ void setup() {
         Log::printf("Booting into Bluetooth Mode\n");
         a2dp.set_on_connection_state_changed(bt_connection_state_cb);
         a2dp.start("winamp");
-
-        if (SPIFFS.exists("/data/bt_address.txt")) {
-            File file = SPIFFS.open("/data/bt_address.txt", "r");
-            if (file) {
-                String mac_str = file.readString();
-                file.close();
-                Log::printf("Found saved BT address: %s\n", mac_str.c_str());
-                sscanf(mac_str.c_str(), "%02x:%02x:%02x:%02x:%02x:%02x", &appContext->peer_address[0], &appContext->peer_address[1], &appContext->peer_address[2], &appContext->peer_address[3], &appContext->peer_address[4], &appContext->peer_address[5]);
-                a2dp.connect_to(appContext->peer_address);
-                stateManager->setState(new BtAutoConnectingState());
-            }
-        } else {
-            stateManager->setState(new BtDiscoveryState());
-        }
+        stateManager->setState(new BtDiscoveryState());
     }
 }
 

@@ -21,11 +21,10 @@ public:
 
 private:
     void draw_bt_discovery_ui(AppContext& context);
-    State* handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button);
+    State* handle_button_press(AppContext& context, bool is_short_press);
 
     static std::vector<DiscoveredBTDevice> bt_devices;
     static int selected_bt_device;
-    static int bt_discovery_scroll_offset;
     static volatile bool is_scanning;
 };
 
