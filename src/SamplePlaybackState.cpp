@@ -17,14 +17,11 @@ void SamplePlaybackState::enter(AppContext& context) {
 }
 
 State* SamplePlaybackState::loop(AppContext& context) {
-    static bool sound_started = false;
-    if (millis() - start_time >= 5000 && !sound_started) {
+    if (millis() - start_time >= 5000 && !context.audioFile) {
         play_file(context, "/sample.mp3", true);
-        sound_started = true;
     }
 
-    if (millis() - start_time >= 15000) {
-        sound_started = false;
+    if (context.audioFile && !context.audioFile.available()) {
         return new ArtistSelectionState();
     }
     return nullptr;
