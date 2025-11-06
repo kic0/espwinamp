@@ -31,8 +31,8 @@ State* SamplePlaybackState::loop(AppContext& context) {
         return new ArtistSelectionState();
     }
 
-    // Also transition after a 10-second timeout to prevent getting stuck
-    if (millis() - start_time >= 10000) {
+    // Also transition after a 20-second timeout to prevent getting stuck
+    if (millis() - start_time >= 20000) {
         Log::printf("Sample playback timed out. Continuing...\n");
         return new ArtistSelectionState();
     }
