@@ -19,15 +19,24 @@ void SamplePlaybackState::enter(AppContext& context) {
 }
 
 State* SamplePlaybackState::loop(AppContext& context) {
-    Log::printf("SamplePlaybackState::loop\n");
+    // Play sample after 5 seconds
     if (millis() - start_time >= 5000 && !context.audioFile) {
         Log::printf("Playing sample.mp3...\n");
-        play_file(context, "/sample.mp3", true);
+        play_file(context, "/sample.mp3", true, 0);
     }
 
+    // Transition after audio is finished
     if (context.audioFile && !context.audioFile.available()) {
+        Log::printf("Sample playback finished.\n");
         return new ArtistSelectionState();
     }
+
+    // Also transition after a 10-second timeout to prevent getting stuck
+    if (millis() - start_time >= 10000) {
+        Log::printf("Sample playback timed out. Continuing...\n");
+        return new ArtistSelectionState();
+    }
+
     return nullptr;
 }
 
