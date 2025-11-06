@@ -5,8 +5,7 @@
 #include <SD.h>
 #include "pins.h"
 #include "Log.h"
-
-void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset);
+#include "UI.h"
 
 void PlaylistSelectionState::enter(AppContext& context) {
     Log::printf("Entering Playlist Selection State\n");
@@ -37,8 +36,7 @@ void PlaylistSelectionState::exit(AppContext& context) {}
 
 State* PlaylistSelectionState::handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button) {
     if (is_scroll_button && is_short_press) {
-        context.selected_playlist++;
-        calculate_scroll_offset(context.selected_playlist, context.playlists.size() + 1, context.playlist_scroll_offset, 2);
+        context.selected_playlist = (context.selected_playlist + 1) % (context.playlists.size() + 1);
         context.ui_dirty = true;
     } else if (is_scroll_button && !is_short_press) {
         if (context.selected_playlist == context.playlists.size()) {
@@ -57,9 +55,9 @@ State* PlaylistSelectionState::handle_button_press(AppContext& context, bool is_
                     String lowerCaseFileName = fileName;
                     lowerCaseFileName.toLowerCase();
                     if (lowerCaseFileName.endsWith(".mp3")) {
-                        context.current_playlist_files.push_back({full_path + "/" + fileName, MP3});
+                        context.current_playlist_files.push_back({full_path + "/" + fileName, artist_name, playlist_name, MP3});
                     } else if (lowerCaseFileName.endsWith(".wav")) {
-                        context.current_playlist_files.push_back({full_path + "/" + fileName, WAV});
+                        context.current_playlist_files.push_back({full_path + "/" + fileName, artist_name, playlist_name, WAV});
                     }
                 }
                 file.close();
@@ -76,50 +74,6 @@ State* PlaylistSelectionState::handle_button_press(AppContext& context, bool is_
         }
     }
     return nullptr;
-}
-
-void PlaylistSelectionState::draw_playlist_ui(AppContext& context) {
-    if (!context.ui_dirty) return;
-    context.ui_dirty = false;
-    context.display.clearDisplay();
-    context.display.setTextSize(1);
-    context.display.setTextColor(SSD1306_WHITE);
-
-    context.display.setCursor(0, 0);
-    context.display.print("Select Playlist:");
-    context.display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
-
-    if (context.playlists.empty()) {
-        context.display.setCursor(0, 26);
-        context.display.print("No playlists found!");
-    } else {
-        int list_size = context.playlists.size();
-        for (int i = context.playlist_scroll_offset; i < list_size + 1 && i < context.playlist_scroll_offset + 4; i++) {
-            int y_pos = 26 + (i - context.playlist_scroll_offset) * 10;
-
-            if (i == list_size) {
-                if (i == context.selected_playlist) {
-                    context.display.setCursor(0, y_pos);
-                    context.display.print("> ");
-                    context.display.print("<- back");
-                } else {
-                    context.display.setCursor(12, y_pos);
-                    context.display.print("<- back");
-                }
-            } else {
-                String name = context.playlists[i];
-                if (i == context.selected_playlist) {
-                    context.display.setCursor(0, y_pos);
-                    context.display.print("> ");
-                    context.display.print(name);
-                } else {
-                    context.display.setCursor(12, y_pos);
-                    context.display.print(name);
-                }
-            }
-        }
-    }
-    context.display.display();
 }
 
 void PlaylistSelectionState::scan_playlists(AppContext& context) {

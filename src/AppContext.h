@@ -16,6 +16,8 @@ enum FileType { MP3, WAV };
 
 struct Song {
   String path;
+  String artist;
+  String album;
   FileType type;
 };
 

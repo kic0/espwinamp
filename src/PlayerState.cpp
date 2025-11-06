@@ -5,8 +5,7 @@
 #include "pins.h"
 #include <MP3DecoderHelix.h>
 #include "Log.h"
-
-void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset);
+#include "UI.h"
 
 int32_t get_data_frames(Frame *frame, int32_t frame_count);
 int32_t get_wav_data_frames(Frame *frame, int32_t frame_count);
@@ -50,8 +49,7 @@ void PlayerState::exit(AppContext& context) {
 
 State* PlayerState::handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button) {
     if (is_scroll_button && is_short_press) {
-        context.selected_song_in_player++;
-        calculate_scroll_offset(context.selected_song_in_player, context.current_playlist_files.size() + 1, context.player_scroll_offset, 2);
+        context.selected_song_in_player = (context.selected_song_in_player + 1) % (context.current_playlist_files.size() + 1);
         context.ui_dirty = true;
     } else if (is_scroll_button && !is_short_press) {
         if (context.selected_song_in_player == context.current_playlist_files.size()) {
@@ -62,33 +60,6 @@ State* PlayerState::handle_button_press(AppContext& context, bool is_short_press
         }
     }
     return nullptr;
-}
-
-void PlayerState::draw_player_ui(AppContext& context) {
-    if (!context.ui_dirty) return;
-    context.ui_dirty = false;
-    context.display.clearDisplay();
-    context.display.setTextSize(1);
-    context.display.setTextColor(SSD1306_WHITE);
-
-    context.display.setCursor(0, 0);
-    context.display.print("Now Playing:");
-    context.display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
-
-    if (!context.current_playlist_files.empty()) {
-        String song_name = context.current_playlist_files[context.current_song_index].path;
-        int last_slash = song_name.lastIndexOf('/');
-        if (last_slash != -1) {
-            song_name = song_name.substring(last_slash + 1);
-        }
-        song_name.replace(".mp3", "");
-        song_name.replace(".wav", "");
-
-        context.display.setCursor(0, 12);
-        context.display.print(song_name);
-    }
-
-    context.display.display();
 }
 
 void PlayerState::play_song(AppContext& context, Song song, unsigned long seek_position) {

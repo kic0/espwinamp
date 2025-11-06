@@ -11,7 +11,6 @@ public:
     void exit(AppContext& context) override;
 
 private:
-    void draw_playlist_ui(AppContext& context);
     State* handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button);
     void scan_playlists(AppContext& context);
 };

@@ -12,7 +12,6 @@ public:
     void exit(AppContext& context) override;
 
 private:
-    void draw_player_ui(AppContext& context);
     State* handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button);
     void play_song(AppContext& context, Song song, unsigned long seek_position = 0);
     void play_mp3(AppContext& context, String filename, unsigned long seek_position = 0);
