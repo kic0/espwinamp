@@ -180,6 +180,19 @@ void draw_playlist_ui(AppContext& context) {
     context.display.display();
 }
 
+// Helper functions to read BMP metadata
+static uint16_t read16(File &f) {
+  uint16_t result;
+  f.read((uint8_t *)&result, sizeof(result));
+  return result;
+}
+
+static uint32_t read32(File &f) {
+  uint32_t result;
+  f.read((uint8_t *)&result, sizeof(result));
+  return result;
+}
+
 void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t x, int16_t y) {
   File file = SPIFFS.open(filename, "r");
   if (!file) {
@@ -189,27 +202,24 @@ void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t 
   }
 
   // BMP header validation
-  if (file.read() != 'B' || file.read() != 'M') {
-    Serial.println(F("Not a BMP file"));
+  if (read16(file) != 0x4D42) { // "BM"
+    Serial.println(F("Not a valid BMP file"));
     file.close();
     return;
   }
 
-  // Seek to known locations for metadata
-  file.seek(10); // Data offset
-  uint32_t dataOffset;
-  file.read((uint8_t*)&dataOffset, 4);
+  // Read metadata
+  file.seek(10);
+  uint32_t dataOffset = read32(file);
+  file.seek(18);
+  int32_t width = read32(file);
+  int32_t height = read32(file);
+  file.seek(28);
+  uint16_t bpp = read16(file);
+  file.seek(34);
+  uint32_t dataSize = read32(file);
 
-  file.seek(18); // Width & height
-  int32_t width, height;
-  file.read((uint8_t*)&width, 4);
-  file.read((uint8_t*)&height, 4);
-
-  file.seek(28); // Bits per pixel
-  uint16_t bpp;
-  file.read((uint8_t*)&bpp, 2);
-
-  if (bpp != 1) {
+  if (bpp != 24) {
     Serial.print(F("Unsupported BMP format: "));
     Serial.print(bpp);
     Serial.println(F(" bpp"));
@@ -218,25 +228,31 @@ void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t 
   }
 
   // BMPs are stored bottom-up, and rows are padded to a 4-byte boundary.
-  uint32_t rowSize = (width + 31) / 32 * 4;
+  uint32_t rowSize = (width * 3 + 3) & ~3;
   uint8_t lineBuffer[rowSize];
 
   file.seek(dataOffset);
 
   for (int16_t j = 0; j < height; j++) {
-      // The BMP is stored bottom-up, so we draw from the bottom of the target area upwards.
-      int16_t dest_y = y + (height - 1 - j);
+    // The BMP is stored bottom-up, so we read from the end of the file and draw from the bottom up.
+    int16_t dest_y = y + (height - 1 - j);
+    file.seek(dataOffset + j * rowSize);
+    file.read(lineBuffer, rowSize);
 
-      file.read(lineBuffer, rowSize);
+    for (int16_t i = 0; i < width; i++) {
+      // Convert 24-bit color to monochrome
+      // BMP format is BGR, not RGB.
+      uint8_t b = lineBuffer[i * 3];
+      uint8_t g = lineBuffer[i * 3 + 1];
+      uint8_t r = lineBuffer[i * 3 + 2];
 
-      for (int16_t i = 0; i < width; i++) {
-          // Unpack pixels from the buffer. The MSB is the first pixel.
-          if ((lineBuffer[i / 8] << (i % 8)) & 0x80) {
-              context.display.drawPixel(x + i, dest_y, SSD1306_WHITE);
-          } else {
-              context.display.drawPixel(x + i, dest_y, SSD1306_BLACK);
-          }
+      // Use a simple luminance calculation
+      if ((r * 0.299 + g * 0.587 + b * 0.114) > 128) {
+        context.display.drawPixel(x + i, dest_y, SSD1306_WHITE);
+      } else {
+        context.display.drawPixel(x + i, dest_y, SSD1306_BLACK);
       }
+    }
   }
 
   file.close();
