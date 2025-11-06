@@ -22,8 +22,7 @@ State* BtConnectingState::loop(AppContext& context) {
         File file = SPIFFS.open("/data/bt_address.txt", "w");
         if (file) {
             char bda_str[18];
-            const uint8_t* addr = esp_bt_dev_get_address();
-            sprintf(bda_str, "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+            sprintf(bda_str, "%02x:%02x:%02x:%02x:%02x:%02x", context.peer_address[0], context.peer_address[1], context.peer_address[2], context.peer_address[3], context.peer_address[4], context.peer_address[5]);
             file.print(bda_str);
             file.close();
             Log::printf("Saved BT address: %s\n", bda_str);

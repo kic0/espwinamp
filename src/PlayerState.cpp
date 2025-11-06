@@ -13,8 +13,6 @@ void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, voi
 
 void PlayerState::enter(AppContext& context) {
     Log::printf("Entering Player State\n");
-    context.decoder.begin();
-    context.decoder.setDataCallback(pcm_data_callback);
     if (!context.current_playlist_files.empty()) {
         play_song(context, context.current_playlist_files[context.current_song_index]);
     }

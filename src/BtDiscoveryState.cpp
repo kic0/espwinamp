@@ -53,7 +53,8 @@ State* BtDiscoveryState::handle_button_press(AppContext& context, bool is_short_
         if (!bt_devices.empty()) {
             esp_bt_gap_cancel_discovery();
             is_scanning = false;
-            context.a2dp.connect_to(bt_devices[selected_bt_device].address);
+            memcpy(context.peer_address, bt_devices[selected_bt_device].address, ESP_BD_ADDR_LEN);
+            context.a2dp.connect_to(context.peer_address);
             return new BtConnectingState();
         }
     }

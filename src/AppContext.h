@@ -51,6 +51,7 @@ public:
     int selected_song_in_player = 0;
     int player_scroll_offset = 0;
 
+    esp_bd_addr_t peer_address;
     bool ui_dirty = true;
     bool is_bt_connected = false;
 

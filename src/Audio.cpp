@@ -4,13 +4,7 @@
 
 extern AppContext* g_appContext;
 
-void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
-    AppContext* context = g_appContext;
-    if (context->pcm_buffer_len + len < sizeof(context->pcm_buffer) / sizeof(int16_t)) {
-        memcpy(context->pcm_buffer + context->pcm_buffer_len, pcm_buffer_cb, len * sizeof(int16_t));
-        context->pcm_buffer_len += len;
-    }
-}
+void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref);
 
 int32_t get_data_frames(Frame *frame, int32_t frame_count) {
     AppContext* context = g_appContext;
@@ -18,6 +12,7 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
         if (context->audioFile && context->audioFile.available()) {
             int bytes_read = context->audioFile.read(context->read_buffer, sizeof(context->read_buffer));
             if (bytes_read > 0) {
+                Log::printf("Read %d bytes from audio file\n", bytes_read);
                 context->decoder.write(context->read_buffer, bytes_read);
             }
         } else {
@@ -65,5 +60,16 @@ void play_file(AppContext& context, String filename, bool from_spiffs, unsigned 
 
     context.pcm_buffer_len = 0;
     context.decoder.begin();
+    context.decoder.setDataCallback(pcm_data_callback);
     context.a2dp.set_data_callback_in_frames(get_data_frames);
+}
+
+
+
+void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
+    AppContext* context = g_appContext;
+    if (context->pcm_buffer_len + len < sizeof(context->pcm_buffer) / sizeof(int16_t)) {
+        memcpy(context->pcm_buffer + context->pcm_buffer_len, pcm_buffer_cb, len * sizeof(int16_t));
+        context->pcm_buffer_len += len;
+    }
 }

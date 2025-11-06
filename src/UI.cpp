@@ -201,15 +201,17 @@ void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t 
   uint16_t bpp;
   file.read((uint8_t*)&bpp, 2);
 
-  // Only support 24-bit BMPs
-  if (bpp == 24) {
+  // Only support 1-bit BMPs
+  if (bpp == 1) {
     file.seek(dataOffset);
-    uint8_t buffer[width * 3];
+    uint8_t buffer[width];
     for (int16_t j = 0; j < height; j++) {
-      file.read(buffer, width * 3);
+      file.read(buffer, width / 8);
       for (int16_t i = 0; i < width; i++) {
-        if (buffer[i * 3] < 128) {
+        if (buffer[i / 8] & (128 >> (i % 8))) {
           context.display.drawPixel(x + i, y + j, SSD1306_WHITE);
+        } else {
+          context.display.drawPixel(x + i, y + j, SSD1306_BLACK);
         }
       }
     }
