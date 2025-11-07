@@ -69,8 +69,6 @@ void draw_marquee_list_item(AppContext& context, int index, int x, int y, const 
 }
 
 void draw_list_ui(AppContext& context, const String& title, const std::vector<String>& items, int selected_item, const String& bottom_item_text) {
-    if (!context.ui_dirty) return;
-    context.ui_dirty = false;
     context.display.clearDisplay();
 
     draw_header(context, title);
@@ -109,8 +107,6 @@ void draw_list_ui(AppContext& context, const String& title, const std::vector<St
 }
 
 void draw_player_ui(AppContext& context) {
-    if (!context.ui_dirty) return;
-    context.ui_dirty = false;
     context.display.clearDisplay();
 
     String title = "Now Playing";
@@ -278,16 +274,12 @@ void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t 
 }
 
 void draw_sample_playback_ui(AppContext& context) {
-    if (!context.ui_dirty) return;
-    context.ui_dirty = false;
     context.display.clearDisplay();
     draw_bitmap_from_spiffs(context, "/splash.bmp", 10, 0);
     context.display.display();
 }
 
 void draw_connecting_ui(AppContext& context) {
-    if (!context.ui_dirty) return;
-    context.ui_dirty = false;
     context.display.clearDisplay();
     context.display.setTextSize(1);
     context.display.setTextColor(SSD1306_WHITE);

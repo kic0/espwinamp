@@ -37,11 +37,8 @@ void bt_connection_state_cb(esp_a2d_connection_state_t state, void *ptr) {
 void setup() {
     Serial.begin(115200);
     Log::printf("Setup starting...\n");
-    delay(1000); // Initial delay for power stabilization
+    delay(1000);
 
-    // Correct Initialization Order: SD -> BT -> Display
-
-    // 1. Initialize SD Card
     if(!SD.begin(SD_CS)){
         Log::printf("Card Mount Failed. Restarting...\n");
         delay(2000);
@@ -50,16 +47,13 @@ void setup() {
     Log::printf("SD Card initialized.\n");
     delay(500);
 
-    // 2. Initialize Bluetooth
     a2dp.set_on_connection_state_changed(bt_connection_state_cb);
     a2dp.start("winamp");
     Log::printf("Bluetooth initialized.\n");
     delay(500);
 
-    // 3. Initialize Display (last)
     if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
         Log::printf("SSD1306 allocation failed\n");
-        // Don't restart here, just log, as other parts might work
     } else {
         Log::printf("Display initialized.\n");
     }
@@ -100,5 +94,6 @@ void loop() {
             default:
                 break;
         }
+        context.ui_dirty = false; // Clear the flag AFTER drawing
     }
 }
