@@ -51,6 +51,7 @@ void setup() {
 
     a2dp.set_on_connection_state_changed(bt_connection_state_cb);
     a2dp.start("winamp");
+    a2dp.set_volume(64); // Set volume to 50% (0-127)
     Log::printf("Bluetooth initialized.\n");
     delay(500);
 
