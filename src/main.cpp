@@ -52,7 +52,6 @@ void setup() {
     Log::printf("Bluetooth initialized.\n");
     delay(500);
 
-    // Initialize I2C bus before display
     Wire.begin(OLED_SDA, OLED_SCL);
 
     if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
@@ -66,6 +65,8 @@ void setup() {
     context.state_manager = &stateManager;
     stateManager.setState(new BtDiscoveryState());
 }
+
+unsigned long last_heap_check = 0;
 
 void loop() {
     stateManager.loop();
@@ -98,5 +99,10 @@ void loop() {
                 break;
         }
         context.ui_dirty = false;
+    }
+
+    if (millis() - last_heap_check > 2000) {
+        Log::printf("Free heap: %u bytes\n", ESP.getFreeHeap());
+        last_heap_check = millis();
     }
 }
