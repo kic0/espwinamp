@@ -14,14 +14,23 @@ void SamplePlaybackState::enter(AppContext& context) {
 }
 
 State* SamplePlaybackState::loop(AppContext& context) {
-    if (!playback_started && millis() - start_time >= 1000) { // Wait 1s before playing
+    // Start playback after a short delay to allow the UI to draw
+    if (!playback_started && millis() - start_time >= 200) {
         Log::printf("Playing sample.mp3...\n");
         play_file(context, "/data/sample.mp3", true, 0);
         playback_started = true;
     }
 
-    // Check if playback has finished. The audio task will set is_playing to false.
-    if (playback_started && !context.is_playing) {
+    // The audio task will set is_playing to true once playback starts.
+    // Only after it has started and then finished (is_playing becomes false again)
+    // should we transition.
+    if (playback_started && context.is_playing) {
+        // This flag helps us know that playback has successfully started
+        // and we should transition only when it stops.
+        context.sample_playback_is_active = true;
+    }
+
+    if (context.sample_playback_is_active && !context.is_playing) {
         Log::printf("Sample playback finished.\n");
         return new ArtistSelectionState();
     }
@@ -37,4 +46,5 @@ State* SamplePlaybackState::loop(AppContext& context) {
 void SamplePlaybackState::exit(AppContext& context) {
     // Correctly stop the audio playback to leave the system in a clean state
     stop_audio_playback(context);
+    context.sample_playback_is_active = false;
 }

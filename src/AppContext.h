@@ -65,6 +65,7 @@ public:
     TaskHandle_t wifiTaskHandle = NULL;
     volatile bool wifi_task_should_stop = false;
     volatile bool new_song_from_spiffs = false;
+    bool sample_playback_is_active = false;
 
     // --- Marquee ---
     static const int MAX_MARQUEE_LINES = 6;

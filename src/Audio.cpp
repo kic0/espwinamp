@@ -71,8 +71,10 @@ void audioTask(void* parameter) {
         }
 
         if (context->is_playing && context->audioFile && context->audioFile.available()) {
-            size_t pcm_buffer_free_space = (sizeof(context->pcm_buffer) / sizeof(int16_t)) - context->pcm_buffer_len;
-            if (pcm_buffer_free_space >= 4096) { // Leave a safe margin
+            size_t pcm_buffer_capacity = sizeof(context->pcm_buffer) / sizeof(int16_t);
+            size_t high_water_mark = pcm_buffer_capacity * 0.75;
+
+            if (context->pcm_buffer_len < high_water_mark) {
                 int bytes_read = context->audioFile.read(context->read_buffer, sizeof(context->read_buffer));
                 if (bytes_read > 0) {
                     context->decoder.write(context->read_buffer, bytes_read);
