@@ -28,7 +28,6 @@ State* PlaylistSelectionState::loop(AppContext& context) {
         }
     }
 
-    // Drawing is now handled in the main loop
     return nullptr;
 }
 
@@ -58,17 +57,23 @@ void PlaylistSelectionState::scan_playlists(AppContext& context, String artist) 
     String path = "/" + artist;
     File root = SD.open(path.c_str());
     if (!root) {
-        Serial.println("Failed to open artist folder");
+        Log::printf("Failed to open artist folder: %s\n", path.c_str());
         return;
     }
 
-    File file = root.openNextFile();
-    while (file) {
-        if (file.isDirectory() && file.name()[0] != '.') {
-            context.playlists.push_back(file.name());
+    while (true) {
+        File file = root.openNextFile();
+        if (!file) {
+            break; // No more files
         }
-        file.close();
-        file = root.openNextFile();
+
+        if (file.isDirectory() && file.name()[0] != '.') {
+            // Create a safe copy of the name before closing the file
+            String playlistName = String(file.name());
+            context.playlists.push_back(playlistName);
+        }
+
+        file.close(); // Now it's safe to close
     }
     root.close();
 }
