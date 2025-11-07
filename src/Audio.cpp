@@ -13,47 +13,47 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count);
 void audioTask(void* parameter) {
     AppContext* context = g_appContext;
     while (true) {
-        // Handle playback control signals first
-        if (context->stop_requested) {
-            if (context->is_playing) {
-                if (context->audioFile) context->audioFile.close();
-                context->decoder.end();
-                context->is_playing = false;
+        // Wait indefinitely for a signal
+        if (xSemaphoreTake(context->audio_task_semaphore, portMAX_DELAY) == pdTRUE) {
+            // Check for control signals inside the critical section
+            taskENTER_CRITICAL(&context->pcm_buffer_mutex);
+            if (context->stop_requested) {
+                if (context->is_playing) {
+                    if (context->audioFile) context->audioFile.close();
+                    context->decoder.end();
+                    context->is_playing = false;
+                }
+                context->stop_requested = false;
             }
-            context->stop_requested = false;
-        }
 
-        char filename_to_play[256] = "";
-        taskENTER_CRITICAL(&context->pcm_buffer_mutex);
-        if (context->new_song_to_play[0] != '\0') {
-            strncpy(filename_to_play, (const char*)context->new_song_to_play, sizeof(filename_to_play) - 1);
-            filename_to_play[sizeof(filename_to_play) - 1] = '\0';
-            context->new_song_to_play[0] = '\0';
-        }
-        taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
+            char filename_to_play[256] = "";
+            if (context->new_song_to_play[0] != '\0') {
+                strncpy(filename_to_play, (const char*)context->new_song_to_play, sizeof(filename_to_play) - 1);
+                filename_to_play[sizeof(filename_to_play) - 1] = '\0';
+                context->new_song_to_play[0] = '\0';
+            }
+            taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
 
-        if (strlen(filename_to_play) > 0) {
-            if (context->is_playing) {
-                if (context->audioFile) context->audioFile.close();
-                context->decoder.end();
+            if (strlen(filename_to_play) > 0) {
+                if (context->is_playing) {
+                    if (context->audioFile) context->audioFile.close();
+                    context->decoder.end();
+                }
+                if (context->new_song_from_spiffs) {
+                    context->audioFile = SPIFFS.open(filename_to_play);
+                } else {
+                    context->audioFile = SD.open(filename_to_play);
+                }
+                if (context->audioFile) {
+                    context->decoder.begin();
+                    context->decoder.setDataCallback(pcm_data_callback);
+                    context->a2dp.set_data_callback_in_frames(get_data_frames);
+                    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+                    context->is_playing = true;
+                }
             }
-            if (context->new_song_from_spiffs) {
-                context->audioFile = SPIFFS.open(filename_to_play);
-            } else {
-                context->audioFile = SD.open(filename_to_play);
-            }
-            if (context->audioFile) {
-                context->decoder.begin();
-                context->decoder.setDataCallback(pcm_data_callback);
-                context->a2dp.set_data_callback_in_frames(get_data_frames);
-                esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-                context->is_playing = true;
-                xSemaphoreGive(context->audio_task_semaphore); // Start the data pump
-            }
-        }
 
-        // Wait for a signal from the consumer, with a timeout
-        if (xSemaphoreTake(context->audio_task_semaphore, 10 / portTICK_PERIOD_MS) == pdTRUE) {
+            // Produce data if playing
             if (context->is_playing && context->audioFile && context->audioFile.available()) {
                 int bytes_read = context->audioFile.read(context->read_buffer, sizeof(context->read_buffer));
                 if (bytes_read > 0) {
@@ -101,12 +101,14 @@ void play_file(AppContext& context, String filename, bool from_spiffs, unsigned 
     context.new_song_from_spiffs = from_spiffs;
     strncpy((char*)context.new_song_to_play, filename.c_str(), sizeof(context.new_song_to_play) - 1);
     taskEXIT_CRITICAL(&context.pcm_buffer_mutex);
+    xSemaphoreGive(context.audio_task_semaphore); // Signal the audio task to process the new song
 }
 
 void stop_audio_playback(AppContext& context) {
     if (context.is_playing) {
         Log::printf("Main loop: Requesting audio stop.\n");
         context.stop_requested = true;
+        xSemaphoreGive(context.audio_task_semaphore); // Signal the audio task to process the stop request
     }
 }
 
