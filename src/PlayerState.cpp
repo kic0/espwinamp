@@ -45,7 +45,6 @@ State* PlayerState::loop(AppContext& context) {
 }
 
 void PlayerState::exit(AppContext& context) {
-    stop_audio_playback(context);
     context.decoder.end();
 }
 
