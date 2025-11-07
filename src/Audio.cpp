@@ -13,6 +13,7 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count);
 void audioTask(void* parameter) {
     AppContext* context = g_appContext;
     while (true) {
+        // Handle playback control signals first
         if (context->stop_requested) {
             if (context->is_playing) {
                 if (context->audioFile) context->audioFile.close();
@@ -47,22 +48,23 @@ void audioTask(void* parameter) {
                 context->a2dp.set_data_callback_in_frames(get_data_frames);
                 esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
                 context->is_playing = true;
+                xSemaphoreGive(context->audio_task_semaphore); // Kick off the data pump
             }
         }
 
-        if (context->is_playing && context->audioFile && context->audioFile.available()) {
-            size_t pcm_buffer_capacity = sizeof(context->pcm_buffer) / sizeof(int16_t);
-            if (context->pcm_buffer_count < pcm_buffer_capacity) {
+        // Wait for a signal from the consumer, with a timeout to allow for stop requests
+        if (xSemaphoreTake(context->audio_task_semaphore, 10 / portTICK_PERIOD_MS) == pdTRUE) {
+            if (context->is_playing && context->audioFile && context->audioFile.available()) {
                 int bytes_read = context->audioFile.read(context->read_buffer, sizeof(context->read_buffer));
                 if (bytes_read > 0) {
                     context->decoder.write(context->read_buffer, bytes_read);
                 } else {
-                    vTaskDelay(100 / portTICK_PERIOD_MS); // Wait for buffer to drain
+                    vTaskDelay(100 / portTICK_PERIOD_MS); // Allow buffer to drain
                     context->is_playing = false; // End of file
                 }
             }
         }
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(10 / portTICK_PERIOD_MS); // Prevent spinning
     }
 }
 
@@ -71,13 +73,20 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
     int32_t frames_to_provide = 0;
 
     taskENTER_CRITICAL(&context->pcm_buffer_mutex);
+    size_t pcm_buffer_capacity = sizeof(context->pcm_buffer) / sizeof(int16_t);
+    size_t low_water_mark = pcm_buffer_capacity * 0.25;
+
+    if (context->pcm_buffer_count < low_water_mark) {
+        xSemaphoreGive(context->audio_task_semaphore);
+    }
+
     size_t frames_in_buffer = context->pcm_buffer_count / 2;
     frames_to_provide = (frames_in_buffer < frame_count) ? frames_in_buffer : frame_count;
     for (int i = 0; i < frames_to_provide; i++) {
         frame[i].channel1 = context->pcm_buffer[context->pcm_buffer_tail];
-        context->pcm_buffer_tail = (context->pcm_buffer_tail + 1) % (sizeof(context->pcm_buffer) / sizeof(int16_t));
+        context->pcm_buffer_tail = (context->pcm_buffer_tail + 1) % pcm_buffer_capacity;
         frame[i].channel2 = context->pcm_buffer[context->pcm_buffer_tail];
-        context->pcm_buffer_tail = (context->pcm_buffer_tail + 1) % (sizeof(context->pcm_buffer) / sizeof(int16_t));
+        context->pcm_buffer_tail = (context->pcm_buffer_tail + 1) % pcm_buffer_capacity;
     }
     context->pcm_buffer_count -= frames_to_provide * 2;
     taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
