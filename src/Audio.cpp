@@ -116,6 +116,15 @@ void stop_audio_playback(AppContext& context) {
 
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
     AppContext* context = g_appContext;
+
+    if (context->diag_sample_rate != info.samprate) {
+        context->diag_sample_rate = info.samprate;
+        context->diag_bits_per_sample = info.bitsPerSample;
+        context->diag_channels = info.nChans;
+        // Reconfigure the stream with the new sample rate
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
+    }
+
     taskENTER_CRITICAL(&context->pcm_buffer_mutex);
     size_t pcm_buffer_capacity = sizeof(context->pcm_buffer) / sizeof(int16_t);
     for (size_t i = 0; i < len; i++) {
