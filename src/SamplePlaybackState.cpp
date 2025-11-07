@@ -14,12 +14,14 @@ void SamplePlaybackState::enter(AppContext& context) {
 }
 
 State* SamplePlaybackState::loop(AppContext& context) {
-    if (millis() - start_time >= 5000 && !context.audioFile) {
+    if (!playback_started && millis() - start_time >= 1000) { // Wait 1s before playing
         Log::printf("Playing sample.mp3...\n");
         play_file(context, "/data/sample.mp3", true, 0);
+        playback_started = true;
     }
 
-    if (context.audioFile && !context.audioFile.available()) {
+    // Check if playback has finished. The audio task will set is_playing to false.
+    if (playback_started && !context.is_playing) {
         Log::printf("Sample playback finished.\n");
         return new ArtistSelectionState();
     }

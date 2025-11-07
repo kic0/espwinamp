@@ -65,7 +65,7 @@ void setup() {
     SPIFFS.begin(true);
 
     xTaskCreatePinnedToCore(
-        audioTask, "AudioTask", 8192, NULL, 1, &context.audioTaskHandle, 1
+        audioTask, "AudioTask", 4096, NULL, 1, &context.audioTaskHandle, 1
     );
 
     context.state_manager = &stateManager;
