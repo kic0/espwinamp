@@ -16,6 +16,7 @@ int BtDiscoveryState::selected_bt_device = 0;
 volatile bool BtDiscoveryState::is_scanning = false;
 esp_bd_addr_t BtDiscoveryState::saved_peer_address = {0};
 bool BtDiscoveryState::has_saved_address = false;
+unsigned long BtDiscoveryState::connect_at_time = 0;
 
 // Global pointers for C-style callback
 extern AppContext* g_appContext;
@@ -27,6 +28,7 @@ void BtDiscoveryState::enter(AppContext& context) {
     bt_devices.clear();
     selected_bt_device = 0;
     is_scanning = true;
+    connect_at_time = 0; // Reset the auto-connect timer
 
     // Read saved BT address from SPIFFS
     has_saved_address = false;
@@ -50,6 +52,15 @@ void BtDiscoveryState::enter(AppContext& context) {
 }
 
 State* BtDiscoveryState::loop(AppContext& context) {
+    // Handle delayed auto-connect
+    if (connect_at_time > 0 && millis() > connect_at_time) {
+        Log::printf("Auto-connect timer expired, attempting to connect...\n");
+        esp_bt_gap_cancel_discovery();
+        is_scanning = false;
+        connect_at_time = 0;
+        return new BtConnectingState();
+    }
+
     ButtonPress press = context.button.read();
     if (press == SHORT_PRESS) {
         return handle_button_press(context, true);
@@ -64,14 +75,13 @@ State* BtDiscoveryState::loop(AppContext& context) {
         }
     }
 
-    // Drawing is now handled in the main loop
     return nullptr;
 }
 
 void BtDiscoveryState::exit(AppContext& context) {
     if (is_scanning) {
         esp_bt_gap_cancel_discovery();
-        is_scanning = false; // Ensure we don't restart discovery
+        is_scanning = false;
     }
     esp_bt_gap_register_callback(nullptr);
 }
@@ -97,10 +107,9 @@ State* BtDiscoveryState::handle_button_press(AppContext& context, bool is_short_
 void BtDiscoveryState::esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param) {
     switch (event) {
         case ESP_BT_GAP_DISC_RES_EVT: {
-            // Check if device is already in our list
             for (auto const& device : bt_devices) {
                 if (memcmp(device.address, param->disc_res.bda, ESP_BD_ADDR_LEN) == 0) {
-                    return; // Already found
+                    return;
                 }
             }
 
@@ -113,7 +122,6 @@ void BtDiscoveryState::esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_
                     param->disc_res.bda[3], param->disc_res.bda[4], param->disc_res.bda[5]);
             Log::printf("Device found: %s\n", bda_str);
 
-            // Extract name from properties
             String name = "";
             for (int i = 0; i < param->disc_res.num_prop; i++) {
                 if (param->disc_res.prop[i].type == ESP_BT_GAP_DEV_PROP_BDNAME) {
@@ -126,19 +134,17 @@ void BtDiscoveryState::esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_
             bt_devices.push_back(new_device);
             if (g_appContext) g_appContext->ui_dirty = true;
 
-            // Auto-connect logic
-            if (has_saved_address && memcmp(new_device.address, saved_peer_address, ESP_BD_ADDR_LEN) == 0) {
-                Log::printf("Found saved device, attempting to connect...\n");
+            // Set up delayed auto-connect
+            if (has_saved_address && connect_at_time == 0 && memcmp(new_device.address, saved_peer_address, ESP_BD_ADDR_LEN) == 0) {
+                Log::printf("Found saved device, will connect in 2 seconds...\n");
                 memcpy(g_appContext->peer_address, new_device.address, sizeof(esp_bd_addr_t));
-                esp_bt_gap_cancel_discovery();
-                is_scanning = false;
-                g_stateManager->setState(new BtConnectingState());
+                connect_at_time = millis() + 2000;
             }
             break;
         }
         case ESP_BT_GAP_DISC_STATE_CHANGED_EVT: {
             if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
-                if (is_scanning) { // Only restart if we didn't intentionally stop it
+                if (is_scanning) {
                     Log::printf("Discovery stopped. Restarting...\n");
                     esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
                 } else {

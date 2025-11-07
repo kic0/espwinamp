@@ -32,6 +32,7 @@ private:
     static volatile bool is_scanning;
     static esp_bd_addr_t saved_peer_address; // To hold address from SPIFFS
     static bool has_saved_address;
+    static unsigned long connect_at_time; // For delayed auto-connect
 };
 
 #endif // BT_DISCOVERY_STATE_H

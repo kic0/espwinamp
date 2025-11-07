@@ -19,7 +19,17 @@ void StateManager::setState(State* newState) {
     }
 }
 
+void StateManager::requestStateChange(State* newState) {
+    requested_state = newState;
+}
+
 void StateManager::loop() {
+    // Handle state transitions requested by callbacks
+    if (requested_state != nullptr) {
+        setState(const_cast<State*>(requested_state));
+        requested_state = nullptr;
+    }
+
     if (currentState) {
         State* nextState = currentState->loop(context);
         if (nextState != nullptr) {

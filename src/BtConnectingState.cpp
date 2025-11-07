@@ -43,6 +43,14 @@ State* BtConnectingState::loop(AppContext& context) {
         return new BtDiscoveryState();
     }
 
+    // Handle case where connection is lost while trying to connect
+    if (!context.is_bt_connected && (millis() - entry_time > 1000)) { // Give it a second to connect first
+        if(context.a2dp.get_connection_state() == ESP_A2D_CONNECTION_STATE_DISCONNECTED){
+             Log::printf("Connection failed, returning to discovery.\n");
+             return new BtDiscoveryState();
+        }
+    }
+
     return nullptr;
 }
 

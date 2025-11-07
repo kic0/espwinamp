@@ -31,7 +31,7 @@ void bt_connection_state_cb(esp_a2d_connection_state_t state, void *ptr) {
             if (g_appContext->audioFile) {
                 g_appContext->playback_position = g_appContext->audioFile.position();
             }
-            g_stateManager->setState(new BtDiscoveryState());
+            g_stateManager->requestStateChange(new BtDiscoveryState());
         }
     }
 }
