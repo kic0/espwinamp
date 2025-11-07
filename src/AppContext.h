@@ -64,6 +64,7 @@ public:
     portMUX_TYPE pcm_buffer_mutex = portMUX_INITIALIZER_UNLOCKED;
     TaskHandle_t wifiTaskHandle = NULL;
     volatile bool wifi_task_should_stop = false;
+    volatile bool new_song_from_spiffs = false;
 
     // --- Marquee ---
     static const int MAX_MARQUEE_LINES = 6;

@@ -16,7 +16,7 @@ void SamplePlaybackState::enter(AppContext& context) {
 State* SamplePlaybackState::loop(AppContext& context) {
     if (millis() - start_time >= 5000 && !context.audioFile) {
         Log::printf("Playing sample.mp3...\n");
-        play_file(context, "/sample.mp3", true, 0);
+        play_file(context, "/data/sample.mp3", true, 0);
     }
 
     if (context.audioFile && !context.audioFile.available()) {

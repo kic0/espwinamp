@@ -48,7 +48,12 @@ void audioTask(void* parameter) {
                 taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
             }
 
-            context->audioFile = SD.open(filename_to_play);
+            if (context->new_song_from_spiffs) {
+                context->audioFile = SPIFFS.open(filename_to_play);
+            } else {
+                context->audioFile = SD.open(filename_to_play);
+            }
+
             if (!context->audioFile) {
                 Log::printf("Audio task: Failed to open file: %s\n", filename_to_play);
                 context->is_playing = false;
@@ -107,7 +112,10 @@ void play_file(AppContext& context, String filename, bool from_spiffs, unsigned 
     if (context.is_playing) {
         context.stop_requested = true;
     }
+    taskENTER_CRITICAL(&context.pcm_buffer_mutex);
+    context.new_song_from_spiffs = from_spiffs;
     strncpy((char*)context.new_song_to_play, filename.c_str(), sizeof(context.new_song_to_play) - 1);
+    taskEXIT_CRITICAL(&context.pcm_buffer_mutex);
 }
 
 void stop_audio_playback(AppContext& context) {
