@@ -64,7 +64,7 @@ void SettingsState::enter(AppContext& context) {
         }
 
         xTaskCreatePinnedToCore(
-            wifiTask, "WiFiTask", 4096, this, 1, &context.wifiTaskHandle, 1
+            wifiTask, "WiFiTask", 8192, this, 1, &context.wifiTaskHandle, 1
         );
     } else {
         wifi_ap_enabled = false;
