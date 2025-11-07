@@ -55,7 +55,8 @@ public:
     esp_bd_addr_t peer_address;
     bool ui_dirty = true;
     bool is_bt_connected = false;
-    bool is_playing = false; // New reliable flag
+    bool is_playing = false;
+    volatile bool stop_requested = false; // Flag to safely stop audio task
 
     // --- Marquee ---
     static const int MAX_MARQUEE_LINES = 6;

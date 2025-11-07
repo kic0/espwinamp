@@ -9,6 +9,22 @@ void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, voi
 
 int32_t get_data_frames(Frame *frame, int32_t frame_count) {
     AppContext* context = g_appContext;
+
+    // Check if a stop has been requested from the main loop
+    if (context->stop_requested) {
+        Log::printf("Audio task: Stop requested.\n");
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
+        if (context->audioFile) {
+            context->audioFile.close();
+        }
+        context->decoder.end();
+        context->pcm_buffer_len = 0;
+        context->is_playing = false;
+        context->stop_requested = false; // Clear the flag
+        Log::printf("Audio task: Playback stopped and cleaned up.\n");
+        return 0; // Stop providing data
+    }
+
     if (context->pcm_buffer_len == 0) {
         if (context->audioFile && context->audioFile.available()) {
             int bytes_read = context->audioFile.read(context->read_buffer, sizeof(context->read_buffer));
@@ -16,6 +32,8 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
                 context->decoder.write(context->read_buffer, bytes_read);
             }
         } else {
+            // End of file, request a stop
+            context->stop_requested = true;
             return 0;
         }
     }
@@ -38,13 +56,8 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
     return frames_to_provide;
 }
 
-int32_t get_wav_data_frames(Frame *frame, int32_t frame_count) {
-    return 0;
-}
-
 void play_file(AppContext& context, String filename, bool from_spiffs, unsigned long seek_position) {
-    // Ensure the previous decoder is cleaned up before starting a new one
-    context.decoder.end();
+    context.decoder.end(); // Clean up previous decoder instance
 
     if (context.audioFile) {
         context.audioFile.close();
@@ -58,38 +71,29 @@ void play_file(AppContext& context, String filename, bool from_spiffs, unsigned 
 
     if (!context.audioFile) {
         Log::printf("Failed to open file: %s\n", filename.c_str());
-        context.is_playing = false; // Ensure flag is false on failure
+        context.is_playing = false;
         return;
     }
 
     context.pcm_buffer_len = 0;
+    context.stop_requested = false; // Ensure flag is clear before starting
     context.decoder.begin();
     context.decoder.setDataCallback(pcm_data_callback);
     context.a2dp.set_data_callback_in_frames(get_data_frames);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
-    context.is_playing = true; // Set reliable flag
+    context.is_playing = true;
 }
 
 void stop_audio_playback(AppContext& context) {
-    if (context.a2dp.get_audio_state() == ESP_A2D_AUDIO_STATE_STARTED) {
-        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
+    // Only set the flag. The audio task will handle the rest.
+    if (context.is_playing) {
+        Log::printf("Main loop: Requesting audio stop.\n");
+        context.stop_requested = true;
     }
-    if (context.audioFile) {
-        context.audioFile.close();
-    }
-    context.decoder.end(); // Clean up the decoder
-    context.pcm_buffer_len = 0;
-    context.is_playing = false; // Clear reliable flag
-    Log::printf("Audio playback stopped.\n");
 }
 
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
     AppContext* context = g_appContext;
-
-    context->diag_sample_rate = info.samprate;
-    context->diag_bits_per_sample = info.bitsPerSample;
-    context->diag_channels = info.nChans;
-
     if (context->pcm_buffer_len + len < sizeof(context->pcm_buffer) / sizeof(int16_t)) {
         memcpy(context->pcm_buffer + context->pcm_buffer_len, pcm_buffer_cb, len * sizeof(int16_t));
         context->pcm_buffer_len += len;
