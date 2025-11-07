@@ -1,6 +1,6 @@
 #include "BtConnectingState.h"
 #include "AppContext.h"
-#include "SamplePlaybackState.h"
+#include "ArtistSelectionState.h"
 #include "BtDiscoveryState.h"
 #include "Log.h"
 #include <SPIFFS.h>
@@ -11,9 +11,8 @@
 void BtConnectingState::enter(AppContext& context) {
     Log::printf("Entering BT Connecting State\n");
     entry_time = millis();
-    context.ui_dirty = true; // Flag the UI to be drawn by the main loop
+    context.ui_dirty = true;
 
-    // Actually initiate the connection
     context.a2dp.connect_to(context.peer_address);
 }
 
@@ -29,17 +28,16 @@ State* BtConnectingState::loop(AppContext& context) {
         } else {
             Log::printf("Failed to open /data/bt_address.txt for writing\n");
         }
-        return new SamplePlaybackState();
+        return new ArtistSelectionState(); // Go directly to Artist Selection
     }
 
-    if (millis() - entry_time > 10000) { // 10 second timeout
+    if (millis() - entry_time > 10000) {
         Log::printf("Connection timed out.\n");
         context.a2dp.disconnect();
         return new BtDiscoveryState();
     }
 
-    // Handle case where connection is lost while trying to connect
-    if (!context.is_bt_connected && (millis() - entry_time > 1000)) { // Give it a second to connect first
+    if (!context.is_bt_connected && (millis() - entry_time > 1000)) {
         if(context.a2dp.get_connection_state() == ESP_A2D_CONNECTION_STATE_DISCONNECTED){
              Log::printf("Connection failed, returning to discovery.\n");
              return new BtDiscoveryState();

@@ -78,7 +78,7 @@ void draw_list_ui(AppContext& context, const String& title, const std::vector<St
         context.display.print("No items found!");
     } else {
         int list_size = items.size();
-        int center_y = 32;
+        int center_y = 28; // Reduced from 32
         int item_height = 10;
         int marquee_line_index = 0; // Safe index for marquee arrays
 
@@ -105,9 +105,9 @@ void draw_player_ui(AppContext& context) {
     if (!context.current_playlist_files.empty()) {
         Song& current_song = context.current_playlist_files[context.current_song_index];
 
-        // Artist - Album
-        context.display.setCursor(2, 14);
-        context.display.print(current_song.artist + " - " + current_song.album);
+        // Artist - Album (with marquee)
+        String artist_album = current_song.artist + "-" + current_song.album;
+        draw_marquee_list_item(context, AppContext::MAX_MARQUEE_LINES - 1, 2, 14, artist_album, false);
 
         // Progress bar
         int progress = 0;
@@ -118,7 +118,7 @@ void draw_player_ui(AppContext& context) {
         context.display.fillRect(0, 24, progress, 5, SSD1306_WHITE);
 
         int list_size = context.current_playlist_files.size();
-        int center_y = 42;
+        int center_y = 38; // Reduced from 42
         int item_height = 10;
         int marquee_line_index = 0;
 
