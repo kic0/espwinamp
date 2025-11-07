@@ -42,6 +42,8 @@ State* PlaylistSelectionState::handle_button_press(AppContext& context, bool is_
         context.ui_dirty = true;
     } else if (is_scroll_button && !is_short_press) {
         if (context.selected_playlist == context.playlists.size()) {
+            context.artists.clear(); // Clear artists before going back
+            context.selected_artist = 0;
             return new ArtistSelectionState();
         } else if (!context.playlists.empty()) {
             context.current_playlist_files.clear();
