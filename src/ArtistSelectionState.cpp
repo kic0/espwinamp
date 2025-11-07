@@ -29,7 +29,6 @@ State* ArtistSelectionState::loop(AppContext& context) {
         }
     }
 
-    // Drawing is now handled in the main loop
     return nullptr;
 }
 
@@ -48,7 +47,6 @@ State* ArtistSelectionState::handle_button_press(AppContext& context, bool is_sh
         } else if (!context.artists.empty()) {
             context.playlists.clear();
             context.selected_playlist = 0;
-            context.playlist_scroll_offset = 0;
             return new PlaylistSelectionState();
         }
     }
@@ -58,17 +56,23 @@ State* ArtistSelectionState::handle_button_press(AppContext& context, bool is_sh
 void ArtistSelectionState::scan_artists(AppContext& context) {
     File root = SD.open("/");
     if (!root) {
-        Serial.println("Failed to open SD root");
+        Log::printf("Failed to open SD root\n");
         return;
     }
 
-    File file = root.openNextFile();
-    while (file) {
-        if (file.isDirectory() && strcmp(file.name(), "data") != 0 && strcmp(file.name(), "System Volume Information") != 0 && file.name()[0] != '.') {
-            context.artists.push_back(file.name());
+    while(true) {
+        File file = root.openNextFile();
+        if (!file) {
+            break; // No more files
         }
-        file.close();
-        file = root.openNextFile();
+
+        if (file.isDirectory() && strcmp(file.name(), "data") != 0 && strcmp(file.name(), "System Volume Information") != 0 && file.name()[0] != '.') {
+            // Create a safe copy of the name before closing the file
+            String artistName = String(file.name());
+            context.artists.push_back(artistName);
+        }
+
+        file.close(); // Now it's safe to close
     }
     root.close();
 }
