@@ -55,6 +55,7 @@ public:
     esp_bd_addr_t peer_address;
     bool ui_dirty = true;
     bool is_bt_connected = false;
+    bool is_playing = false; // New reliable flag
 
     // --- Marquee ---
     static const int MAX_MARQUEE_LINES = 6;

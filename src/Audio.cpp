@@ -1,7 +1,7 @@
 #include "AppContext.h"
 #include <SPIFFS.h>
 #include "Log.h"
-#include <esp_a2dp_api.h> // For media control
+#include <esp_a2dp_api.h>
 
 extern AppContext* g_appContext;
 
@@ -39,7 +39,7 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
 }
 
 int32_t get_wav_data_frames(Frame *frame, int32_t frame_count) {
-    return 0; // Simplified for now
+    return 0;
 }
 
 void play_file(AppContext& context, String filename, bool from_spiffs, unsigned long seek_position) {
@@ -55,6 +55,7 @@ void play_file(AppContext& context, String filename, bool from_spiffs, unsigned 
 
     if (!context.audioFile) {
         Log::printf("Failed to open file: %s\n", filename.c_str());
+        context.is_playing = false; // Ensure flag is false on failure
         return;
     }
 
@@ -63,6 +64,7 @@ void play_file(AppContext& context, String filename, bool from_spiffs, unsigned 
     context.decoder.setDataCallback(pcm_data_callback);
     context.a2dp.set_data_callback_in_frames(get_data_frames);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
+    context.is_playing = true; // Set reliable flag
 }
 
 void stop_audio_playback(AppContext& context) {
@@ -73,6 +75,7 @@ void stop_audio_playback(AppContext& context) {
         context.audioFile.close();
     }
     context.pcm_buffer_len = 0;
+    context.is_playing = false; // Clear reliable flag
     Log::printf("Audio playback stopped.\n");
 }
 

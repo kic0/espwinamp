@@ -20,7 +20,7 @@ void draw_header(AppContext& context, const String& title) {
         context.display.print("BT");
         x_pos += 18; // Advance cursor for next icon
     }
-    if (context.a2dp.get_audio_state() == ESP_A2D_AUDIO_STATE_STARTED) {
+    if (context.is_playing) {
         context.display.setCursor(x_pos, 2);
         context.display.print(">");
     }
