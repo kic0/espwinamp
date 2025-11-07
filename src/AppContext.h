@@ -31,7 +31,7 @@ public:
     libhelix::MP3DecoderHelix decoder;
     File audioFile;
     uint8_t read_buffer[1024];
-    int16_t pcm_buffer[4096];
+    int16_t pcm_buffer[2048];
     volatile size_t pcm_buffer_head = 0;
     volatile size_t pcm_buffer_tail = 0;
     volatile size_t pcm_buffer_count = 0;

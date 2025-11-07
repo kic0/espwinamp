@@ -96,6 +96,8 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
 void play_file(AppContext& context, String filename, bool from_spiffs, unsigned long seek_position) {
     if (context.is_playing) {
         context.stop_requested = true;
+        xSemaphoreGive(context.audio_task_semaphore);
+        vTaskDelay(20 / portTICK_PERIOD_MS); // Give the audio task a moment to stop the current song
     }
     taskENTER_CRITICAL(&context.pcm_buffer_mutex);
     context.new_song_from_spiffs = from_spiffs;
