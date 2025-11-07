@@ -43,6 +43,9 @@ int32_t get_wav_data_frames(Frame *frame, int32_t frame_count) {
 }
 
 void play_file(AppContext& context, String filename, bool from_spiffs, unsigned long seek_position) {
+    // Ensure the previous decoder is cleaned up before starting a new one
+    context.decoder.end();
+
     if (context.audioFile) {
         context.audioFile.close();
     }
@@ -74,6 +77,7 @@ void stop_audio_playback(AppContext& context) {
     if (context.audioFile) {
         context.audioFile.close();
     }
+    context.decoder.end(); // Clean up the decoder
     context.pcm_buffer_len = 0;
     context.is_playing = false; // Clear reliable flag
     Log::printf("Audio playback stopped.\n");

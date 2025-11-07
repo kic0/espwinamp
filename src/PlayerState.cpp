@@ -45,7 +45,7 @@ State* PlayerState::loop(AppContext& context) {
 }
 
 void PlayerState::exit(AppContext& context) {
-    context.decoder.end();
+    // Do nothing here. Audio should persist.
 }
 
 State* PlayerState::handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button) {
