@@ -9,6 +9,9 @@ public:
     State* loop(AppContext& context) override;
     void exit(AppContext& context) override;
     StateType getType() const override { return StateType::BT_CONNECTING; }
+
+private:
+    unsigned long entry_time = 0;
 };
 
 #endif // BT_CONNECTING_STATE_H

@@ -1,6 +1,7 @@
 #include "BtConnectingState.h"
 #include "AppContext.h"
 #include "SamplePlaybackState.h"
+#include "BtDiscoveryState.h"
 #include "Log.h"
 #include <SPIFFS.h>
 #include "esp_bt_main.h"
@@ -9,12 +10,16 @@
 
 void BtConnectingState::enter(AppContext& context) {
     Log::printf("Entering BT Connecting State\n");
+    entry_time = millis();
     context.display.clearDisplay();
     context.display.setTextSize(1);
     context.display.setTextColor(SSD1306_WHITE);
     context.display.setCursor(0, 0);
     context.display.println("Connecting...");
     context.display.display();
+
+    // Actually initiate the connection
+    context.a2dp.connect_to(context.peer_address);
 }
 
 State* BtConnectingState::loop(AppContext& context) {
@@ -31,7 +36,13 @@ State* BtConnectingState::loop(AppContext& context) {
         }
         return new SamplePlaybackState();
     }
-    // Add a timeout eventually
+
+    if (millis() - entry_time > 10000) { // 10 second timeout
+        Log::printf("Connection timed out.\n");
+        context.a2dp.disconnect();
+        return new BtDiscoveryState();
+    }
+
     return nullptr;
 }
 

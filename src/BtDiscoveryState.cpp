@@ -71,6 +71,7 @@ State* BtDiscoveryState::loop(AppContext& context) {
 void BtDiscoveryState::exit(AppContext& context) {
     if (is_scanning) {
         esp_bt_gap_cancel_discovery();
+        is_scanning = false; // Ensure we don't restart discovery
     }
     esp_bt_gap_register_callback(nullptr);
 }
@@ -137,9 +138,12 @@ void BtDiscoveryState::esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_
         }
         case ESP_BT_GAP_DISC_STATE_CHANGED_EVT: {
             if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
-                Log::printf("Discovery stopped. Restarting...\n");
-                // Don't set is_scanning to false, because we're restarting it
-                esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
+                if (is_scanning) { // Only restart if we didn't intentionally stop it
+                    Log::printf("Discovery stopped. Restarting...\n");
+                    esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
+                } else {
+                    Log::printf("Discovery stopped intentionally.\n");
+                }
             } else {
                  Log::printf("Discovery started.\n");
             }
