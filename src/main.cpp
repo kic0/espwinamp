@@ -52,6 +52,9 @@ void setup() {
     Log::printf("Bluetooth initialized.\n");
     delay(500);
 
+    // Initialize I2C bus before display
+    Wire.begin(OLED_SDA, OLED_SCL);
+
     if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
         Log::printf("SSD1306 allocation failed\n");
     } else {
@@ -94,6 +97,6 @@ void loop() {
             default:
                 break;
         }
-        context.ui_dirty = false; // Clear the flag AFTER drawing
+        context.ui_dirty = false;
     }
 }
