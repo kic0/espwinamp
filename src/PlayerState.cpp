@@ -41,7 +41,6 @@ State* PlayerState::loop(AppContext& context) {
         }
     }
 
-    // Drawing is now handled in the main loop
     return nullptr;
 }
 
@@ -97,13 +96,13 @@ void PlayerState::scan_playlist_files(AppContext& context) {
     while (true) {
         File entry =  dir.openNextFile();
         if (! entry) {
-            break; // no more files
+            break;
         }
         String fileName = entry.name();
         fileName.toLowerCase();
         if (fileName.endsWith(".mp3") || fileName.endsWith(".wav")) {
             Song song;
-            song.path = String(entry.name());
+            song.path = path + "/" + String(entry.name()); // Construct the full path
             song.artist = artist;
             song.album = playlist;
             song.type = fileName.endsWith(".mp3") ? MP3 : WAV;
