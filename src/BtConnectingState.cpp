@@ -1,5 +1,6 @@
 #include "BtConnectingState.h"
 #include "AppContext.h"
+#include "SamplePlaybackState.h"
 #include "ArtistSelectionState.h"
 #include "BtDiscoveryState.h"
 #include "Log.h"
@@ -28,7 +29,7 @@ State* BtConnectingState::loop(AppContext& context) {
         } else {
             Log::printf("Failed to open /data/bt_address.txt for writing\n");
         }
-        return new ArtistSelectionState(); // Go directly to Artist Selection
+        return new SamplePlaybackState();
     }
 
     if (millis() - entry_time > 10000) {
