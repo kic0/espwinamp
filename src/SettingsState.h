@@ -5,9 +5,12 @@
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
+void wifiTask(void* parameter);
+
 class SettingsState : public State {
 public:
-    SettingsState() : server(80) {}
+    friend void wifiTask(void* parameter);
+    SettingsState();
     void enter(AppContext& context) override;
     State* loop(AppContext& context) override;
     void exit(AppContext& context) override;
@@ -23,7 +26,7 @@ public:
 
 
 private:
-    AsyncWebServer server;
+    static AsyncWebServer* server;
     bool wifi_ap_enabled = false;
     String wifi_ssid;
     String wifi_password;

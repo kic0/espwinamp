@@ -57,6 +57,13 @@ public:
     bool is_bt_connected = false;
     bool is_playing = false;
     volatile bool stop_requested = false; // Flag to safely stop audio task
+    volatile char new_song_to_play[256] = ""; // Used to signal the audio task
+
+    // --- Task Handles & Mutex for Core 1 ---
+    TaskHandle_t audioTaskHandle = NULL;
+    portMUX_TYPE pcm_buffer_mutex = portMUX_INITIALIZER_UNLOCKED;
+    TaskHandle_t wifiTaskHandle = NULL;
+    volatile bool wifi_task_should_stop = false;
 
     // --- Marquee ---
     static const int MAX_MARQUEE_LINES = 6;

@@ -8,10 +8,37 @@
 #include "Log.h"
 #include "UI.h"
 
-void stop_audio_playback(AppContext& context); // Forward declaration from Audio.cpp
+AsyncWebServer* SettingsState::server = nullptr;
+extern AppContext* g_appContext;
+
+void stop_audio_playback(AppContext& context);
+
+void wifiTask(void* parameter) {
+    AppContext* context = g_appContext;
+    SettingsState* settingsState = (SettingsState*)parameter;
+
+    settingsState->setup_web_server();
+
+    while (!context->wifi_task_should_stop) {
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+
+    if (SettingsState::server) {
+        SettingsState::server->end();
+        delete SettingsState::server;
+        SettingsState::server = nullptr;
+    }
+    context->wifiTaskHandle = NULL;
+    vTaskDelete(NULL);
+}
+
+SettingsState::SettingsState() {
+    // Constructor remains empty, server is created on demand
+}
 
 void SettingsState::enter(AppContext& context) {
     Log::printf("Entering Settings State\n");
+    vTaskSuspend(context.audioTaskHandle);
 
     File wifi_file = SPIFFS.open("/wifi_credentials.txt", "r");
     if (wifi_file) {
@@ -30,7 +57,15 @@ void SettingsState::enter(AppContext& context) {
 
     if (SPIFFS.exists("/wifi_mode.txt")) {
         wifi_ap_enabled = true;
-        setup_web_server(); // Start the server
+        context.wifi_task_should_stop = false;
+
+        if (server == nullptr) {
+            server = new AsyncWebServer(80);
+        }
+
+        xTaskCreatePinnedToCore(
+            wifiTask, "WiFiTask", 8192, this, 1, &context.wifiTaskHandle, 1
+        );
     } else {
         wifi_ap_enabled = false;
     }
@@ -43,36 +78,39 @@ State* SettingsState::loop(AppContext& context) {
     } else if (press == LONG_PRESS) {
         return handle_button_press(context, false);
     }
-
-    draw_settings_ui(context);
     return nullptr;
 }
 
 void SettingsState::exit(AppContext& context) {
-    server.end();
+    if (context.wifiTaskHandle != NULL) {
+        context.wifi_task_should_stop = true;
+        vTaskDelay(200 / portTICK_PERIOD_MS);
+    }
+    vTaskResume(context.audioTaskHandle);
+    Log::printf("Exiting Settings State\n");
 }
 
 State* SettingsState::handle_button_press(AppContext& context, bool is_short_press) {
-    int num_options = wifi_ap_enabled ? 4 : 2; // "Disable", "SSID", "Pass", "Back" OR "Enable", "Back"
+    int num_options = wifi_ap_enabled ? 4 : 2;
 
     if (is_short_press) {
         selected_setting = (selected_setting + 1) % num_options;
         context.ui_dirty = true;
-    } else { // Long press
+    } else {
         if (wifi_ap_enabled) {
-            if (selected_setting == 0) { // Disable AP
+            if (selected_setting == 0) {
                 SPIFFS.remove("/wifi_mode.txt");
                 ESP.restart();
-            } else if (selected_setting == 3) { // Back
+            } else if (selected_setting == 3) {
                 return new ArtistSelectionState();
             }
         } else {
-            if (selected_setting == 0) { // Enable AP
+            if (selected_setting == 0) {
                 stop_audio_playback(context);
                 File file = SPIFFS.open("/wifi_mode.txt", "w");
                 file.close();
                 ESP.restart();
-            } else if (selected_setting == 1) { // Back
+            } else if (selected_setting == 1) {
                 return new ArtistSelectionState();
             }
         }
@@ -81,17 +119,12 @@ State* SettingsState::handle_button_press(AppContext& context, bool is_short_pre
 }
 
 void SettingsState::setup_web_server() {
-    Log::printf("Starting WiFi AP...\n");
-    if (WiFi.softAP(wifi_ssid.c_str(), wifi_password.c_str())) {
-        Log::printf("AP Started. IP Address: %s\n", WiFi.softAPIP().toString().c_str());
-    } else {
-        Log::printf("Failed to start WiFi AP.\n");
-    }
+    Log::printf("Starting WiFi AP on Core 1...\n");
+    WiFi.softAP(wifi_ssid.c_str(), wifi_password.c_str());
+    Log::printf("AP Started. IP Address: %s\n", WiFi.softAPIP().toString().c_str());
 
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    server->on("/", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, "/index.html", "text/html");
     });
-    // All other server endpoints remain the same...
-    // To save space, they are omitted here but would be included in the real file.
-    server.begin();
+    server->begin();
 }

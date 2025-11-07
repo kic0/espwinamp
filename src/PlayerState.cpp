@@ -29,7 +29,8 @@ State* PlayerState::loop(AppContext& context) {
         return handle_button_press(context, false, true);
     }
 
-    if (context.audioFile && !context.audioFile.available()) {
+    // The audio task will set is_playing to false when a song ends.
+    if (!context.is_playing && !context.current_playlist_files.empty()) {
         context.current_song_index = (context.current_song_index + 1) % context.current_playlist_files.size();
         play_song(context, context.current_playlist_files[context.current_song_index]);
     }

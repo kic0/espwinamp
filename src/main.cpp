@@ -21,6 +21,8 @@ StateManager stateManager(context);
 AppContext* g_appContext = &context;
 extern StateManager* g_stateManager;
 
+void audioTask(void* parameter);
+
 void bt_connection_state_cb(esp_a2d_connection_state_t state, void *ptr) {
     Log::printf("BT Connection State Changed: %d\n", state);
     if (g_appContext) {
@@ -61,6 +63,10 @@ void setup() {
     }
 
     SPIFFS.begin(true);
+
+    xTaskCreatePinnedToCore(
+        audioTask, "AudioTask", 8192, NULL, 1, &context.audioTaskHandle, 1
+    );
 
     context.state_manager = &stateManager;
     stateManager.setState(new BtDiscoveryState());
