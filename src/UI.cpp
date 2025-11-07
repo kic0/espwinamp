@@ -13,16 +13,19 @@ void draw_header(AppContext& context, const String& title) {
     context.display.setCursor(2, 2);
     context.display.print(title);
 
+    // Draw status icons in black
+    int x_pos = 100;
     if (context.is_bt_connected) {
-        context.display.setCursor(100, 2);
+        context.display.setCursor(x_pos, 2);
         context.display.print("BT");
+        x_pos += 18; // Advance cursor for next icon
     }
     if (context.a2dp.get_audio_state() == ESP_A2D_AUDIO_STATE_STARTED) {
-        context.display.setCursor(115, 2);
+        context.display.setCursor(x_pos, 2);
         context.display.print(">");
     }
 
-    context.display.setTextColor(SSD1306_WHITE);
+    context.display.setTextColor(SSD1306_WHITE); // Set color back to white for the rest of the UI
 }
 
 void draw_marquee_list_item(AppContext& context, int marquee_index, int x, int y, const String& text, bool selected) {
@@ -78,9 +81,9 @@ void draw_list_ui(AppContext& context, const String& title, const std::vector<St
         context.display.print("No items found!");
     } else {
         int list_size = items.size();
-        int center_y = 28; // Reduced from 32
+        int center_y = 28;
         int item_height = 10;
-        int marquee_line_index = 0; // Safe index for marquee arrays
+        int marquee_line_index = 0;
 
         for (int i = 0; i < list_size + (bottom_item_text.isEmpty() ? 0 : 1); i++) {
             int y_pos = center_y + (i - selected_item) * item_height;
@@ -105,11 +108,9 @@ void draw_player_ui(AppContext& context) {
     if (!context.current_playlist_files.empty()) {
         Song& current_song = context.current_playlist_files[context.current_song_index];
 
-        // Artist - Album (with marquee)
         String artist_album = current_song.artist + "-" + current_song.album;
         draw_marquee_list_item(context, AppContext::MAX_MARQUEE_LINES - 1, 2, 14, artist_album, false);
 
-        // Progress bar
         int progress = 0;
         if (context.audioFile) {
             progress = (int)(((float)context.audioFile.position() / context.audioFile.size()) * 128);
@@ -118,7 +119,7 @@ void draw_player_ui(AppContext& context) {
         context.display.fillRect(0, 24, progress, 5, SSD1306_WHITE);
 
         int list_size = context.current_playlist_files.size();
-        int center_y = 38; // Reduced from 42
+        int center_y = 38;
         int item_height = 10;
         int marquee_line_index = 0;
 
