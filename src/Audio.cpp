@@ -48,11 +48,11 @@ void audioTask(void* parameter) {
                 context->a2dp.set_data_callback_in_frames(get_data_frames);
                 esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
                 context->is_playing = true;
-                xSemaphoreGive(context->audio_task_semaphore); // Kick off the data pump
+                xSemaphoreGive(context->audio_task_semaphore); // Start the data pump
             }
         }
 
-        // Wait for a signal from the consumer, with a timeout to allow for stop requests
+        // Wait for a signal from the consumer, with a timeout
         if (xSemaphoreTake(context->audio_task_semaphore, 10 / portTICK_PERIOD_MS) == pdTRUE) {
             if (context->is_playing && context->audioFile && context->audioFile.available()) {
                 int bytes_read = context->audioFile.read(context->read_buffer, sizeof(context->read_buffer));
@@ -64,7 +64,6 @@ void audioTask(void* parameter) {
                 }
             }
         }
-        vTaskDelay(10 / portTICK_PERIOD_MS); // Prevent spinning
     }
 }
 
