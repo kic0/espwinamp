@@ -15,17 +15,9 @@ void audioTask(void* parameter) {
     while (true) {
         if (context->stop_requested) {
             if (context->is_playing) {
-                Log::printf("Audio task: Stop requested.\n");
-                esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
-                if (context->audioFile) {
-                    context->audioFile.close();
-                }
+                if (context->audioFile) context->audioFile.close();
                 context->decoder.end();
-                taskENTER_CRITICAL(&context->pcm_buffer_mutex);
-                context->pcm_buffer_len = 0;
-                taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
                 context->is_playing = false;
-                Log::printf("Audio task: Playback stopped and cleaned up.\n");
             }
             context->stop_requested = false;
         }
@@ -43,25 +35,13 @@ void audioTask(void* parameter) {
             if (context->is_playing) {
                 if (context->audioFile) context->audioFile.close();
                 context->decoder.end();
-                taskENTER_CRITICAL(&context->pcm_buffer_mutex);
-                context->pcm_buffer_len = 0;
-                taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
             }
-
             if (context->new_song_from_spiffs) {
                 context->audioFile = SPIFFS.open(filename_to_play);
             } else {
                 context->audioFile = SD.open(filename_to_play);
             }
-
-            if (!context->audioFile) {
-                Log::printf("Audio task: Failed to open file: %s\n", filename_to_play);
-                context->is_playing = false;
-            } else {
-                Log::printf("Audio task: Starting playback for %s\n", filename_to_play);
-                taskENTER_CRITICAL(&context->pcm_buffer_mutex);
-                context->pcm_buffer_len = 0;
-                taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
+            if (context->audioFile) {
                 context->decoder.begin();
                 context->decoder.setDataCallback(pcm_data_callback);
                 context->a2dp.set_data_callback_in_frames(get_data_frames);
@@ -72,19 +52,16 @@ void audioTask(void* parameter) {
 
         if (context->is_playing && context->audioFile && context->audioFile.available()) {
             size_t pcm_buffer_capacity = sizeof(context->pcm_buffer) / sizeof(int16_t);
-            size_t high_water_mark = pcm_buffer_capacity * 0.75;
-
-            if (context->pcm_buffer_len < high_water_mark) {
+            if (context->pcm_buffer_count < pcm_buffer_capacity) {
                 int bytes_read = context->audioFile.read(context->read_buffer, sizeof(context->read_buffer));
                 if (bytes_read > 0) {
                     context->decoder.write(context->read_buffer, bytes_read);
+                } else {
+                    vTaskDelay(100 / portTICK_PERIOD_MS); // Wait for buffer to drain
+                    context->is_playing = false; // End of file
                 }
             }
-        } else if (context->is_playing) {
-            Log::printf("Audio task: End of file.\n");
-            context->stop_requested = true;
         }
-
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
@@ -94,18 +71,15 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
     int32_t frames_to_provide = 0;
 
     taskENTER_CRITICAL(&context->pcm_buffer_mutex);
-    if (context->pcm_buffer_len > 0) {
-        frames_to_provide = (context->pcm_buffer_len / 2 < frame_count) ? context->pcm_buffer_len / 2 : frame_count;
-        for (int i = 0; i < frames_to_provide; i++) {
-            frame[i].channel1 = context->pcm_buffer[i * 2];
-            frame[i].channel2 = context->pcm_buffer[i * 2 + 1];
-        }
-        int samples_consumed = frames_to_provide * 2;
-        context->pcm_buffer_len -= samples_consumed;
-        if (context->pcm_buffer_len > 0) {
-            memmove(context->pcm_buffer, context->pcm_buffer + samples_consumed, context->pcm_buffer_len * sizeof(int16_t));
-        }
+    size_t frames_in_buffer = context->pcm_buffer_count / 2;
+    frames_to_provide = (frames_in_buffer < frame_count) ? frames_in_buffer : frame_count;
+    for (int i = 0; i < frames_to_provide; i++) {
+        frame[i].channel1 = context->pcm_buffer[context->pcm_buffer_tail];
+        context->pcm_buffer_tail = (context->pcm_buffer_tail + 1) % (sizeof(context->pcm_buffer) / sizeof(int16_t));
+        frame[i].channel2 = context->pcm_buffer[context->pcm_buffer_tail];
+        context->pcm_buffer_tail = (context->pcm_buffer_tail + 1) % (sizeof(context->pcm_buffer) / sizeof(int16_t));
     }
+    context->pcm_buffer_count -= frames_to_provide * 2;
     taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
 
     return frames_to_provide;
@@ -131,11 +105,13 @@ void stop_audio_playback(AppContext& context) {
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
     AppContext* context = g_appContext;
     taskENTER_CRITICAL(&context->pcm_buffer_mutex);
-    if (context->pcm_buffer_len + len < sizeof(context->pcm_buffer) / sizeof(int16_t)) {
-        memcpy(context->pcm_buffer + context->pcm_buffer_len, pcm_buffer_cb, len * sizeof(int16_t));
-        context->pcm_buffer_len += len;
-    } else {
-        Log::printf("PCM buffer overflow!\n");
+    size_t pcm_buffer_capacity = sizeof(context->pcm_buffer) / sizeof(int16_t);
+    for (size_t i = 0; i < len; i++) {
+        if (context->pcm_buffer_count < pcm_buffer_capacity) {
+            context->pcm_buffer[context->pcm_buffer_head] = pcm_buffer_cb[i];
+            context->pcm_buffer_head = (context->pcm_buffer_head + 1) % pcm_buffer_capacity;
+            context->pcm_buffer_count++;
+        }
     }
     taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
 }
