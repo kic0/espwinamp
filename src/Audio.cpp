@@ -13,57 +13,70 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count);
 void audioTask(void* parameter) {
     AppContext* context = g_appContext;
     while (true) {
-        // Wait indefinitely for a signal
-        if (xSemaphoreTake(context->audio_task_semaphore, portMAX_DELAY) == pdTRUE) {
-            // Check for control signals inside the critical section
-            taskENTER_CRITICAL(&context->pcm_buffer_mutex);
-            if (context->stop_requested) {
-                if (context->is_playing) {
-                    if (context->audioFile) context->audioFile.close();
-                    context->decoder.end();
-                    context->is_playing = false;
-                }
-                context->stop_requested = false;
-            }
-
+        // Non-blocking check for control signals (play, stop)
+        if (xSemaphoreTake(context->audio_task_semaphore, 0) == pdTRUE) {
+            bool should_play_new_song = false;
             char filename_to_play[256] = "";
+
+            taskENTER_CRITICAL(&context->pcm_buffer_mutex);
             if (context->new_song_to_play[0] != '\0') {
+                should_play_new_song = true;
                 strncpy(filename_to_play, (const char*)context->new_song_to_play, sizeof(filename_to_play) - 1);
                 filename_to_play[sizeof(filename_to_play) - 1] = '\0';
                 context->new_song_to_play[0] = '\0';
             }
+            bool stop_requested = context->stop_requested;
+            context->stop_requested = false;
             taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
 
-            if (strlen(filename_to_play) > 0) {
+            if (stop_requested || should_play_new_song) {
                 if (context->is_playing) {
+                    Log::printf("AudioTask: Heap before teardown: %u\n", ESP.getFreeHeap());
+                    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
                     if (context->audioFile) context->audioFile.close();
                     context->decoder.end();
+                    Log::printf("AudioTask: Heap after teardown: %u\n", ESP.getFreeHeap());
+                    context->is_playing = false;
+                    taskENTER_CRITICAL(&context->pcm_buffer_mutex);
+                    context->pcm_buffer_head = 0;
+                    context->pcm_buffer_tail = 0;
+                    context->pcm_buffer_count = 0;
+                    taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
                 }
-                if (context->new_song_from_spiffs) {
-                    context->audioFile = SPIFFS.open(filename_to_play);
-                } else {
-                    context->audioFile = SD.open(filename_to_play);
-                }
-                if (context->audioFile) {
+            }
+
+            if (should_play_new_song) {
+                Log::printf("AudioTask: Heap before setup: %u\n", ESP.getFreeHeap());
+                File audioFile = context->new_song_from_spiffs ? SPIFFS.open(filename_to_play) : SD.open(filename_to_play);
+                if (audioFile) {
+                    context->audioFile = audioFile;
                     context->decoder.begin();
+                    Log::printf("AudioTask: Heap after setup: %u\n", ESP.getFreeHeap());
                     context->decoder.setDataCallback(pcm_data_callback);
                     context->a2dp.set_data_callback_in_frames(get_data_frames);
                     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
                     context->is_playing = true;
                 }
             }
-
-            // Produce data if playing
-            if (context->is_playing && context->audioFile && context->audioFile.available()) {
-                int bytes_read = context->audioFile.read(context->read_buffer, sizeof(context->read_buffer));
-                if (bytes_read > 0) {
-                    context->decoder.write(context->read_buffer, bytes_read);
-                } else {
-                    vTaskDelay(100 / portTICK_PERIOD_MS); // Allow buffer to drain
-                    context->is_playing = false; // End of file
-                }
-            }
         }
+
+        taskENTER_CRITICAL(&context->pcm_buffer_mutex);
+        size_t pcm_buffer_capacity = sizeof(context->pcm_buffer) / sizeof(int16_t);
+        bool buffer_has_space = context->pcm_buffer_count < pcm_buffer_capacity;
+        taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
+
+        if (context->is_playing && context->audioFile && context->audioFile.available() && buffer_has_space) {
+            int bytes_read = context->audioFile.read(context->read_buffer, sizeof(context->read_buffer));
+            if (bytes_read > 0) {
+                context->decoder.write(context->read_buffer, bytes_read);
+            } else {
+                context->is_playing = false;
+            }
+        } else if (context->is_playing) {
+            context->is_playing = false;
+        }
+
+        vTaskDelay(5 / portTICK_PERIOD_MS);
     }
 }
 
@@ -73,11 +86,6 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
 
     taskENTER_CRITICAL(&context->pcm_buffer_mutex);
     size_t pcm_buffer_capacity = sizeof(context->pcm_buffer) / sizeof(int16_t);
-    size_t low_water_mark = pcm_buffer_capacity * 0.25;
-
-    if (context->pcm_buffer_count < low_water_mark) {
-        xSemaphoreGive(context->audio_task_semaphore);
-    }
 
     size_t frames_in_buffer = context->pcm_buffer_count / 2;
     frames_to_provide = (frames_in_buffer < frame_count) ? frames_in_buffer : frame_count;
@@ -94,16 +102,16 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
 }
 
 void play_file(AppContext& context, String filename, bool from_spiffs, unsigned long seek_position) {
-    if (context.is_playing) {
-        context.stop_requested = true;
-        xSemaphoreGive(context.audio_task_semaphore);
-        vTaskDelay(20 / portTICK_PERIOD_MS); // Give the audio task a moment to stop the current song
-    }
     taskENTER_CRITICAL(&context.pcm_buffer_mutex);
     context.new_song_from_spiffs = from_spiffs;
+    // Copy the filename to the shared buffer to signal a new song request
     strncpy((char*)context.new_song_to_play, filename.c_str(), sizeof(context.new_song_to_play) - 1);
+    context.new_song_to_play[sizeof(context.new_song_to_play) - 1] = '\0'; // Ensure null termination
     taskEXIT_CRITICAL(&context.pcm_buffer_mutex);
-    xSemaphoreGive(context.audio_task_semaphore); // Signal the audio task to process the new song
+
+    // Signal the audio task to wake up and process the request.
+    // The task's new logic will handle stopping the current song if one is playing.
+    xSemaphoreGive(context.audio_task_semaphore);
 }
 
 void stop_audio_playback(AppContext& context) {
