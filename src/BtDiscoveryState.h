@@ -30,6 +30,8 @@ private:
     static std::vector<DiscoveredBTDevice> bt_devices;
     static int selected_bt_device;
     static volatile bool is_scanning;
+    static esp_bd_addr_t saved_peer_address; // To hold address from SPIFFS
+    static bool has_saved_address;
 };
 
 #endif // BT_DISCOVERY_STATE_H
