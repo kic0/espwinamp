@@ -18,16 +18,14 @@ Button button(BTN_SCROLL);
 AppContext context(display, a2dp, button);
 StateManager stateManager(context);
 
-// Global pointer for C-style callbacks
 AppContext* g_appContext = &context;
-extern StateManager* g_stateManager; // For callback
+extern StateManager* g_stateManager;
 
 void bt_connection_state_cb(esp_a2d_connection_state_t state, void *ptr) {
     Log::printf("BT Connection State Changed: %d\n", state);
     if (g_appContext) {
         g_appContext->is_bt_connected = (state == ESP_A2D_CONNECTION_STATE_CONNECTED);
         if (state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
-            // Save playback position
             if (g_appContext->audioFile) {
                 g_appContext->playback_position = g_appContext->audioFile.position();
             }
@@ -39,27 +37,18 @@ void bt_connection_state_cb(esp_a2d_connection_state_t state, void *ptr) {
 void setup() {
     Serial.begin(115200);
     Log::printf("Setup starting...\n");
-    delay(1000); // Power stabilization
+    delay(1000);
 
     if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
         Log::printf("SSD1306 allocation failed\n");
         for(;;);
     }
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0,0);
-    display.print("Initializing...");
-    display.display();
 
     SPIFFS.begin(true);
 
     if(!SD.begin(SD_CS)){
         Log::printf("Card Mount Failed\n");
-        display.clearDisplay();
-        display.setCursor(0,0);
-        display.print("SD Card Error!");
-        display.display();
+        // We can't use the display here because it might not be initialized
         delay(2000);
         ESP.restart();
     }
@@ -92,7 +81,14 @@ void loop() {
             case StateType::BT_DISCOVERY:
                 draw_bt_discovery_ui(context);
                 break;
+            case StateType::SAMPLE_PLAYBACK:
+                draw_sample_playback_ui(context);
+                break;
+            case StateType::BT_CONNECTING:
+                draw_connecting_ui(context);
+                break;
             default:
+                // No specific UI for other states
                 break;
         }
     }

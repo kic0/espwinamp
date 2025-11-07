@@ -6,16 +6,11 @@
 
 // Forward declarations from PlayerState.cpp
 void play_file(AppContext& context, String filename, bool from_spiffs, unsigned long seek_position);
-void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t x, int16_t y);
 
 void SamplePlaybackState::enter(AppContext& context) {
     Log::printf("Entering Sample Playback State\n");
     start_time = millis();
-    context.display.clearDisplay();
-    Log::printf("Drawing splash screen...\n");
-    draw_bitmap_from_spiffs(context, "/splash.bmp", 10, 0);
-    context.display.display();
-    context.ui_dirty = true;
+    context.ui_dirty = true; // Flag the UI to be drawn by the main loop
 }
 
 State* SamplePlaybackState::loop(AppContext& context) {

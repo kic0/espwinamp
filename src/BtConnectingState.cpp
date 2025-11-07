@@ -11,12 +11,7 @@
 void BtConnectingState::enter(AppContext& context) {
     Log::printf("Entering BT Connecting State\n");
     entry_time = millis();
-    context.display.clearDisplay();
-    context.display.setTextSize(1);
-    context.display.setTextColor(SSD1306_WHITE);
-    context.display.setCursor(0, 0);
-    context.display.println("Connecting...");
-    context.display.display();
+    context.ui_dirty = true; // Flag the UI to be drawn by the main loop
 
     // Actually initiate the connection
     context.a2dp.connect_to(context.peer_address);

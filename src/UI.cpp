@@ -14,7 +14,6 @@ void draw_header(AppContext& context, const String& title) {
     context.display.setCursor(2, 2);
     context.display.print(title);
 
-    // Draw status icons
     if (context.is_bt_connected) {
         context.display.setCursor(100, 2);
         context.display.print("BT");
@@ -27,14 +26,13 @@ void draw_header(AppContext& context, const String& title) {
     context.display.setTextColor(SSD1306_WHITE);
 }
 
-// New marquee drawing function for list items
 void draw_marquee_list_item(AppContext& context, int index, int x, int y, const String& text, bool selected) {
     int16_t x1, y1;
     uint16_t w, h;
     context.display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
 
     int marquee_x = x;
-    if (w > 128 - x) { // Text is wider than the display area
+    if (w > 128 - x) {
         if (!context.is_marquee_active[index]) {
             context.is_marquee_active[index] = true;
             context.marquee_start_time[index] = millis();
@@ -43,8 +41,8 @@ void draw_marquee_list_item(AppContext& context, int index, int x, int y, const 
 
         unsigned long elapsed = millis() - context.marquee_start_time[index];
         int scroll_pixels = w - (128 - x);
-        int scroll_duration = scroll_pixels * 30; // 30ms per pixel
-        int total_duration = scroll_duration * 2 + 2000; // scroll, pause, scroll back, pause
+        int scroll_duration = scroll_pixels * 30;
+        int total_duration = scroll_duration * 2 + 2000;
 
         int current_pos = elapsed % total_duration;
 
@@ -70,7 +68,6 @@ void draw_marquee_list_item(AppContext& context, int index, int x, int y, const 
     context.display.print(text);
 }
 
-// New generic list drawing function
 void draw_list_ui(AppContext& context, const String& title, const std::vector<String>& items, int selected_item, const String& bottom_item_text) {
     if (!context.ui_dirty) return;
     context.ui_dirty = false;
@@ -111,7 +108,6 @@ void draw_list_ui(AppContext& context, const String& title, const std::vector<St
     context.display.display();
 }
 
-// Redesigned "Now Playing" screen UI
 void draw_player_ui(AppContext& context) {
     if (!context.ui_dirty) return;
     context.ui_dirty = false;
@@ -211,7 +207,6 @@ void draw_bt_discovery_ui(AppContext& context) {
     draw_list_ui(context, "BT Devices", device_names, state->get_selected_device(), "-> Settings");
 }
 
-// Helper functions to read BMP metadata
 static uint16_t read16(File &f) {
   uint16_t result;
   f.read((uint8_t *)&result, sizeof(result));
@@ -232,7 +227,7 @@ void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t 
     return;
   }
 
-  if (read16(file) != 0x4D42) { // "BM"
+  if (read16(file) != 0x4D42) {
     Serial.println(F("Not a valid BMP file"));
     file.close();
     return;
@@ -280,4 +275,23 @@ void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t 
   }
 
   file.close();
+}
+
+void draw_sample_playback_ui(AppContext& context) {
+    if (!context.ui_dirty) return;
+    context.ui_dirty = false;
+    context.display.clearDisplay();
+    draw_bitmap_from_spiffs(context, "/splash.bmp", 10, 0);
+    context.display.display();
+}
+
+void draw_connecting_ui(AppContext& context) {
+    if (!context.ui_dirty) return;
+    context.ui_dirty = false;
+    context.display.clearDisplay();
+    context.display.setTextSize(1);
+    context.display.setTextColor(SSD1306_WHITE);
+    context.display.setCursor(0, 0);
+    context.display.println("Connecting...");
+    context.display.display();
 }
