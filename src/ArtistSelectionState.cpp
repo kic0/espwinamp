@@ -28,7 +28,8 @@ State* ArtistSelectionState::loop(AppContext& context) {
             break;
         }
     }
-    draw_artist_ui(context);
+
+    // Drawing is now handled in the main loop
     return nullptr;
 }
 
@@ -66,7 +67,7 @@ void ArtistSelectionState::scan_artists(AppContext& context) {
         if (file.isDirectory() && strcmp(file.name(), "data") != 0 && strcmp(file.name(), "System Volume Information") != 0 && file.name()[0] != '.') {
             context.artists.push_back(file.name());
         }
-        file.close(); // This was missing
+        file.close();
         file = root.openNextFile();
     }
     root.close();

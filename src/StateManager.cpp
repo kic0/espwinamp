@@ -1,7 +1,11 @@
 #include "StateManager.h"
 #include "State.h"
 
-StateManager::StateManager(AppContext& ctx) : context(ctx), currentState(nullptr) {}
+StateManager* g_stateManager = nullptr;
+
+StateManager::StateManager(AppContext& ctx) : context(ctx), currentState(nullptr) {
+    g_stateManager = this;
+}
 
 void StateManager::setState(State* newState) {
     if (currentState) {
@@ -9,6 +13,7 @@ void StateManager::setState(State* newState) {
         delete currentState;
     }
     currentState = newState;
+    context.ui_dirty = true;
     if (currentState) {
         currentState->enter(context);
     }

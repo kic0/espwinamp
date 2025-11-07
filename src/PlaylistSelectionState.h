@@ -2,6 +2,7 @@
 #define PLAYLIST_SELECTION_STATE_H
 
 #include "State.h"
+#include <vector>
 #include <Arduino.h>
 
 class PlaylistSelectionState : public State {
@@ -13,7 +14,7 @@ public:
 
 private:
     State* handle_button_press(AppContext& context, bool is_short_press, bool is_scroll_button);
-    void scan_playlists(AppContext& context);
+    void scan_playlists(AppContext& context, String artist);
 };
 
 #endif // PLAYLIST_SELECTION_STATE_H

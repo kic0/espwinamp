@@ -13,6 +13,9 @@ void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, voi
 
 void PlayerState::enter(AppContext& context) {
     Log::printf("Entering Player State\n");
+    if (context.current_playlist_files.empty()) {
+        scan_playlist_files(context);
+    }
     if (!context.current_playlist_files.empty()) {
         play_song(context, context.current_playlist_files[context.current_song_index]);
     }
@@ -37,7 +40,8 @@ State* PlayerState::loop(AppContext& context) {
             break;
         }
     }
-    draw_player_ui(context);
+
+    // Drawing is now handled in the main loop
     return nullptr;
 }
 
@@ -77,4 +81,35 @@ void PlayerState::play_mp3(AppContext& context, String filename, unsigned long s
 
 void PlayerState::play_wav(AppContext& context, String filename, unsigned long seek_position) {
     // Simplified for now
+}
+
+void PlayerState::scan_playlist_files(AppContext& context) {
+    String artist = context.artists[context.selected_artist];
+    String playlist = context.playlists[context.selected_playlist];
+    String path = "/" + artist + "/" + playlist;
+
+    File dir = SD.open(path);
+    if (!dir) {
+        Log::printf("Failed to open playlist directory: %s\n", path.c_str());
+        return;
+    }
+
+    while (true) {
+        File entry =  dir.openNextFile();
+        if (! entry) {
+            break; // no more files
+        }
+        String fileName = entry.name();
+        fileName.toLowerCase();
+        if (fileName.endsWith(".mp3") || fileName.endsWith(".wav")) {
+            Song song;
+            song.path = String(entry.name());
+            song.artist = artist;
+            song.album = playlist;
+            song.type = fileName.endsWith(".mp3") ? MP3 : WAV;
+            context.current_playlist_files.push_back(song);
+        }
+        entry.close();
+    }
+    dir.close();
 }

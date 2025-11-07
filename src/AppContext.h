@@ -62,11 +62,14 @@ public:
     unsigned long marquee_start_time[MAX_MARQUEE_LINES] = {0};
     String marquee_text[MAX_MARQUEE_LINES];
 
+    void* state_manager = nullptr; // Pointer to the StateManager
+
     AppContext(Adafruit_SSD1306& d, BluetoothA2DPSource& a, Button& b)
         : display(d), a2dp(a), button(b) {}
 };
 
 void play_file(AppContext& context, String filename, bool from_spiffs, unsigned long seek_position = 0);
+void stop_audio_playback(AppContext& context);
 void draw_bitmap_from_spiffs(AppContext& context, const char *filename, int16_t x, int16_t y);
 
 #endif // APP_CONTEXT_H

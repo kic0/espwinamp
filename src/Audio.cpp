@@ -1,6 +1,7 @@
 #include "AppContext.h"
 #include <SPIFFS.h>
 #include "Log.h"
+#include <esp_a2dp_api.h> // For media control
 
 extern AppContext* g_appContext;
 
@@ -61,19 +62,27 @@ void play_file(AppContext& context, String filename, bool from_spiffs, unsigned 
     context.decoder.begin();
     context.decoder.setDataCallback(pcm_data_callback);
     context.a2dp.set_data_callback_in_frames(get_data_frames);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
 }
 
-
+void stop_audio_playback(AppContext& context) {
+    if (context.a2dp.get_audio_state() == ESP_A2D_AUDIO_STATE_STARTED) {
+        esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
+    }
+    if (context.audioFile) {
+        context.audioFile.close();
+    }
+    context.pcm_buffer_len = 0;
+    Log::printf("Audio playback stopped.\n");
+}
 
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref){
     AppContext* context = g_appContext;
 
-    // Update diagnostic info
     context->diag_sample_rate = info.samprate;
     context->diag_bits_per_sample = info.bitsPerSample;
     context->diag_channels = info.nChans;
 
-    // Append new PCM data to the buffer
     if (context->pcm_buffer_len + len < sizeof(context->pcm_buffer) / sizeof(int16_t)) {
         memcpy(context->pcm_buffer + context->pcm_buffer_len, pcm_buffer_cb, len * sizeof(int16_t));
         context->pcm_buffer_len += len;

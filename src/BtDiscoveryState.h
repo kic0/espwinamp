@@ -20,8 +20,11 @@ public:
 
     static void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param);
 
+    // Public getters for UI
+    const std::vector<DiscoveredBTDevice>& get_discovered_devices() const { return bt_devices; }
+    int get_selected_device() const { return selected_bt_device; }
+
 private:
-    void draw_bt_discovery_ui(AppContext& context);
     State* handle_button_press(AppContext& context, bool is_short_press);
 
     static std::vector<DiscoveredBTDevice> bt_devices;

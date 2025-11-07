@@ -3,14 +3,13 @@
 #include "ArtistSelectionState.h"
 #include "PlayerState.h"
 #include <SD.h>
-#include "pins.h"
 #include "Log.h"
 #include "UI.h"
 
 void PlaylistSelectionState::enter(AppContext& context) {
     Log::printf("Entering Playlist Selection State\n");
     if (context.playlists.empty()) {
-        scan_playlists(context);
+        scan_playlists(context, context.artists[context.selected_artist]);
     }
 }
 
@@ -28,7 +27,8 @@ State* PlaylistSelectionState::loop(AppContext& context) {
             break;
         }
     }
-    draw_playlist_ui(context);
+
+    // Drawing is now handled in the main loop
     return nullptr;
 }
 
@@ -46,55 +46,29 @@ State* PlaylistSelectionState::handle_button_press(AppContext& context, bool is_
             return new ArtistSelectionState();
         } else if (!context.playlists.empty()) {
             context.current_playlist_files.clear();
-            String artist_name = context.artists[context.selected_artist];
-            String playlist_name = context.playlists[context.selected_playlist];
-            String full_path = "/" + artist_name + "/" + playlist_name;
-
-            File playlist_folder = SD.open(full_path);
-            File file = playlist_folder.openNextFile();
-            while(file) {
-                if (!file.isDirectory()) {
-                    String fileName = String(file.name());
-                    String lowerCaseFileName = fileName;
-                    lowerCaseFileName.toLowerCase();
-                    if (lowerCaseFileName.endsWith(".mp3")) {
-                        context.current_playlist_files.push_back({full_path + "/" + fileName, artist_name, playlist_name, MP3});
-                    } else if (lowerCaseFileName.endsWith(".wav")) {
-                        context.current_playlist_files.push_back({full_path + "/" + fileName, artist_name, playlist_name, WAV});
-                    }
-                }
-                file.close();
-                file = playlist_folder.openNextFile();
-            }
-            playlist_folder.close();
-
-            if (!context.current_playlist_files.empty()) {
-                context.current_song_index = 0;
-                context.selected_song_in_player = 0;
-                context.player_scroll_offset = 0;
-                return new PlayerState();
-            }
+            context.current_song_index = 0;
+            context.selected_song_in_player = 0;
+            return new PlayerState();
         }
     }
     return nullptr;
 }
 
-void PlaylistSelectionState::scan_playlists(AppContext& context) {
-    String artist_name = context.artists[context.selected_artist];
-    String artist_path = "/" + artist_name;
-    File artist_dir = SD.open(artist_path);
-    if (!artist_dir) {
-        Serial.printf("Failed to open artist directory: %s\n", artist_path.c_str());
+void PlaylistSelectionState::scan_playlists(AppContext& context, String artist) {
+    String path = "/" + artist;
+    File root = SD.open(path.c_str());
+    if (!root) {
+        Serial.println("Failed to open artist folder");
         return;
     }
 
-    File file = artist_dir.openNextFile();
-    while(file) {
+    File file = root.openNextFile();
+    while (file) {
         if (file.isDirectory() && file.name()[0] != '.') {
             context.playlists.push_back(file.name());
         }
         file.close();
-        file = artist_dir.openNextFile();
+        file = root.openNextFile();
     }
-    artist_dir.close();
+    root.close();
 }
