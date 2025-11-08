@@ -64,23 +64,20 @@ void audioTask(void* parameter) {
 
         // --- Data Production Loop: Runs continuously while playing ---
         while (context->is_playing) {
-            taskENTER_CRITICAL(&context->pcm_buffer_mutex);
             size_t pcm_buffer_capacity = sizeof(context->pcm_buffer) / sizeof(int16_t);
-            bool buffer_has_space = context->pcm_buffer_count < pcm_buffer_capacity;
-            taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
+            if (context->pcm_buffer_count >= pcm_buffer_capacity) {
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+                continue;
+            }
 
-            if (buffer_has_space && context->audioFile && context->audioFile.available()) {
+            if (context->audioFile && context->audioFile.available()) {
                 int bytes_read = context->audioFile.read(context->read_buffer, sizeof(context->read_buffer));
                 if (bytes_read > 0) {
                     context->decoder.write(context->read_buffer, bytes_read);
                 } else {
-                    // End of file, let the audio state callback handle the transition
+                    context->is_playing = false;
                 }
-            } else if (!buffer_has_space) {
-                // Buffer is full, yield to other tasks
-                vTaskDelay(10 / portTICK_PERIOD_MS);
             } else {
-                // File not available or closed, stop playback
                 context->is_playing = false;
             }
         }
@@ -93,22 +90,23 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
 
     taskENTER_CRITICAL(&context->pcm_buffer_mutex);
     size_t pcm_buffer_capacity = sizeof(context->pcm_buffer) / sizeof(int16_t);
-
     size_t frames_in_buffer = context->pcm_buffer_count / 2;
     frames_to_provide = (frames_in_buffer < frame_count) ? frames_in_buffer : frame_count;
+    taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
 
     if (frames_to_provide > 0) {
-        Log::printf("get_data_frames: requested=%d, provided=%d, buffer_count=%d\n", frame_count, frames_to_provide, context->pcm_buffer_count);
+        // This log is very verbose, only enable for debugging
+        // Log::printf("get_data_frames: req=%d, avail=%d, provided=%d\n", frame_count, frames_in_buffer, frames_to_provide);
+        taskENTER_CRITICAL(&context->pcm_buffer_mutex);
+        for (int i = 0; i < frames_to_provide; i++) {
+            frame[i].channel1 = context->pcm_buffer[context->pcm_buffer_tail];
+            context->pcm_buffer_tail = (context->pcm_buffer_tail + 1) % pcm_buffer_capacity;
+            frame[i].channel2 = context->pcm_buffer[context->pcm_buffer_tail];
+            context->pcm_buffer_tail = (context->pcm_buffer_tail + 1) % pcm_buffer_capacity;
+        }
+        context->pcm_buffer_count -= frames_to_provide * 2;
+        taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
     }
-
-    for (int i = 0; i < frames_to_provide; i++) {
-        frame[i].channel1 = context->pcm_buffer[context->pcm_buffer_tail];
-        context->pcm_buffer_tail = (context->pcm_buffer_tail + 1) % pcm_buffer_capacity;
-        frame[i].channel2 = context->pcm_buffer[context->pcm_buffer_tail];
-        context->pcm_buffer_tail = (context->pcm_buffer_tail + 1) % pcm_buffer_capacity;
-    }
-    context->pcm_buffer_count -= frames_to_provide * 2;
-    taskEXIT_CRITICAL(&context->pcm_buffer_mutex);
 
     return frames_to_provide;
 }

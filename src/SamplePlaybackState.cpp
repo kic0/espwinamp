@@ -15,27 +15,25 @@ void SamplePlaybackState::enter(AppContext& context) {
 
 State* SamplePlaybackState::loop(AppContext& context) {
     // Start playback after a short delay to allow the UI to draw
-    if (!playback_started && millis() - start_time >= 200) {
-        Log::printf("Playing sample.mp3...\n");
+    if (!playback_attempted && context.is_a2dp_ready) {
+        Log::printf("A2DP ready, playing sample.mp3...\n");
         play_file(context, "/data/sample.mp3", true, 0);
-        playback_started = true;
+        playback_attempted = true;
     }
 
-    // The audio task will set is_playing to true once playback starts.
-    // Only after it has started and then finished (is_playing becomes false again)
-    // should we transition.
-    if (playback_started && context.is_playing) {
-        // This flag helps us know that playback has successfully started
-        // and we should transition only when it stops.
-        context.sample_playback_is_active = true;
+    // Wait for playback to be confirmed by the A2DP callback
+    if (playback_attempted && context.playback_started) {
+        playback_confirmed = true;
     }
 
-    if (context.sample_playback_is_active && !context.is_playing) {
+    // Once playback is confirmed to have started, wait for it to stop
+    if (playback_confirmed && !context.playback_started && !context.is_playing) {
         Log::printf("Sample playback finished.\n");
         return new ArtistSelectionState();
     }
 
-    if (millis() - start_time >= 20000) {
+    // Timeout if A2DP never becomes ready or playback never starts
+    if (millis() - start_time >= 10000) {
         Log::printf("Sample playback timed out. Continuing...\n");
         return new ArtistSelectionState();
     }

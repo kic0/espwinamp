@@ -11,6 +11,9 @@
 #include "pins.h"
 #include "Log.h"
 #include "UI.h"
+#include "esp_a2dp_api.h"
+
+void a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param);
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 BluetoothA2DPSource a2dp;
@@ -28,12 +31,20 @@ void bt_connection_state_cb(esp_a2d_connection_state_t state, void *ptr) {
     if (g_appContext) {
         g_appContext->is_bt_connected = (state == ESP_A2D_CONNECTION_STATE_CONNECTED);
         if (state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
+            g_appContext->is_a2dp_ready = false;
             g_appContext->playback_started = false;
             if (g_appContext->audioFile) {
                 g_appContext->playback_position = g_appContext->audioFile.position();
             }
             g_stateManager->requestStateChange(new BtDiscoveryState());
         }
+    }
+}
+
+void a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param) {
+    if (event == ESP_A2D_AUDIO_CFG_EVT) {
+        Log::printf("A2DP media source is configured.\n");
+        if (g_appContext) g_appContext->is_a2dp_ready = true;
     }
 }
 
@@ -74,6 +85,7 @@ void setup() {
 
     a2dp.set_on_connection_state_changed(bt_connection_state_cb);
     a2dp.set_on_audio_state_changed(audio_state_changed);
+    esp_a2d_register_callback(a2d_cb);
     a2dp.start("winamp");
     a2dp.set_volume(64); // Set volume to 50% (0-127)
     Log::printf("Bluetooth initialized.\n");

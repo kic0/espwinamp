@@ -57,6 +57,7 @@ public:
     esp_bd_addr_t peer_address;
     bool ui_dirty = true;
     bool is_bt_connected = false;
+    volatile bool is_a2dp_ready = false; // True when A2DP source is configured and ready for media
     bool is_playing = false;
     volatile bool playback_started = false; // True when A2DP stream is confirmed to be active
     volatile bool stop_requested = false; // Flag to safely stop audio task
