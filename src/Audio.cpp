@@ -74,12 +74,11 @@ void audioTask(void* parameter) {
                 if (bytes_read > 0) {
                     context->decoder.write(context->read_buffer, bytes_read);
                 } else {
-                    // End of file
-                    context->is_playing = false;
+                    // End of file, let the audio state callback handle the transition
                 }
             } else if (!buffer_has_space) {
-                // Buffer is full, break out and wait for a signal from the consumer
-                break;
+                // Buffer is full, yield to other tasks
+                vTaskDelay(10 / portTICK_PERIOD_MS);
             } else {
                 // File not available or closed, stop playback
                 context->is_playing = false;

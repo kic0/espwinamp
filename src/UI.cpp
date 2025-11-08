@@ -20,7 +20,7 @@ void draw_header(AppContext& context, const String& title) {
         context.display.print("BT");
         x_pos += 18; // Advance cursor for next icon
     }
-    if (context.is_playing) {
+    if (context.playback_started) {
         context.display.setCursor(x_pos, 2);
         context.display.print(">");
     }

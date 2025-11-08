@@ -28,10 +28,33 @@ void bt_connection_state_cb(esp_a2d_connection_state_t state, void *ptr) {
     if (g_appContext) {
         g_appContext->is_bt_connected = (state == ESP_A2D_CONNECTION_STATE_CONNECTED);
         if (state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
+            g_appContext->playback_started = false;
             if (g_appContext->audioFile) {
                 g_appContext->playback_position = g_appContext->audioFile.position();
             }
             g_stateManager->requestStateChange(new BtDiscoveryState());
+        }
+    }
+}
+
+void audio_state_changed(esp_a2d_audio_state_t state, void *ptr) {
+    Log::printf("Audio state changed: %d\n", state);
+    if (g_appContext == nullptr) return;
+
+    if (state == ESP_A2D_AUDIO_STATE_STARTED) {
+        g_appContext->playback_started = true;
+    } else if (state == ESP_A2D_AUDIO_STATE_STOPPED) {
+        g_appContext->playback_started = false;
+        // If playback stops and we were in the middle of a song (not just at the start),
+        // it means the song finished. Let's play the next one.
+        if (g_appContext->is_playing) {
+            StateManager* sm = static_cast<StateManager*>(g_appContext->state_manager);
+            if (sm && sm->getCurrentState()->getType() == StateType::PLAYER) {
+                // Advance to the next song and play it
+                g_appContext->current_song_index = (g_appContext->current_song_index + 1) % g_appContext->current_playlist_files.size();
+                g_appContext->selected_song_in_player = g_appContext->current_song_index;
+                play_file(*g_appContext, g_appContext->current_playlist_files[g_appContext->current_song_index].path, false);
+            }
         }
     }
 }
@@ -50,6 +73,7 @@ void setup() {
     delay(500);
 
     a2dp.set_on_connection_state_changed(bt_connection_state_cb);
+    a2dp.set_on_audio_state_changed(audio_state_changed);
     a2dp.start("winamp");
     a2dp.set_volume(64); // Set volume to 50% (0-127)
     Log::printf("Bluetooth initialized.\n");

@@ -58,6 +58,7 @@ public:
     bool ui_dirty = true;
     bool is_bt_connected = false;
     bool is_playing = false;
+    volatile bool playback_started = false; // True when A2DP stream is confirmed to be active
     volatile bool stop_requested = false; // Flag to safely stop audio task
     volatile char new_song_to_play[256] = ""; // Used to signal the audio task
 
