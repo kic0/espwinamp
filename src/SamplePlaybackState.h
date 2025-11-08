@@ -12,8 +12,7 @@ public:
 
 private:
     unsigned long start_time;
-    bool playback_attempted = false;
-    bool playback_confirmed = false;
+    bool playback_started = false;
 };
 
 #endif // SAMPLE_PLAYBACK_STATE_H
