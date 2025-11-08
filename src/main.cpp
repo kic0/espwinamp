@@ -118,6 +118,7 @@ bool wifi_ap_enabled = false;
 
 
 // forward declaration
+void app_loop(void *pvParameters);
 int32_t get_data_frames(Frame *frame, int32_t frame_count);
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref);
 void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr);
@@ -430,78 +431,97 @@ void setup() {
     display.println("Winamp");
     display.display();
     delay(2000); // Display splash
+
+    // Create a task for the main application loop and pin it to Core 0
+    xTaskCreatePinnedToCore(
+        app_loop,   // Task function
+        "AppLoop",  // Name of the task
+        10000,      // Stack size in words
+        NULL,       // Task input parameter
+        1,          // Priority of the task
+        NULL,       // Task handle
+        0);         // Core where the task should run
 }
 
 
+void app_loop(void *pvParameters) {
+    for (;;) {
+        static unsigned long last_heap_log = 0;
+        if (millis() - last_heap_log > 2000) {
+            Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
+                          ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
+            last_heap_log = millis();
+        }
+        // --- Button handling ---
+        bool current_scroll = !digitalRead(BTN_SCROLL);
+
+        // Scroll button
+        if (current_scroll && !scroll_pressed) {
+            scroll_pressed = true;
+            scroll_press_time = millis();
+            scroll_long_press_triggered = false;
+        } else if (!current_scroll && scroll_pressed) {
+            scroll_pressed = false;
+            if (!scroll_long_press_triggered) {
+                handle_button_press(true, true);
+            }
+        }
+        if (scroll_pressed && !scroll_long_press_triggered && (millis() - scroll_press_time >= long_press_duration)) {
+            handle_button_press(false, true);
+            scroll_long_press_triggered = true;
+        }
+
+        // --- State machine ---
+        bool should_refresh_for_marquee = false;
+        for (int i = 0; i < MAX_MARQUEE_LINES; i++) {
+            if (is_marquee_active[i]) {
+                should_refresh_for_marquee = true;
+                break;
+            }
+        }
+
+        if (should_refresh_for_marquee) {
+            ui_dirty = true;
+        }
+
+        switch (currentState) {
+            case STARTUP:
+                handle_startup();
+                break;
+            case BT_DISCOVERY:
+                handle_bt_discovery();
+                break;
+            case BT_CONNECTING:
+                handle_bt_connecting();
+                break;
+            case BT_RECONNECTING:
+                handle_bt_reconnecting();
+                break;
+            case SAMPLE_PLAYBACK:
+                handle_sample_playback();
+                break;
+            case ARTIST_SELECTION:
+                handle_artist_selection();
+                break;
+            case PLAYLIST_SELECTION:
+                handle_playlist_selection();
+                break;
+            case PLAYER:
+                handle_player();
+                break;
+            case SETTINGS:
+                handle_settings();
+                break;
+        }
+        delay(120);
+    }
+}
+
 void loop() {
-    static unsigned long last_heap_log = 0;
-    if (millis() - last_heap_log > 2000) {
-        Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
-                      ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
-        last_heap_log = millis();
-    }
-    // --- Button handling ---
-    bool current_scroll = !digitalRead(BTN_SCROLL);
-
-    // Scroll button
-    if (current_scroll && !scroll_pressed) {
-        scroll_pressed = true;
-        scroll_press_time = millis();
-        scroll_long_press_triggered = false;
-    } else if (!current_scroll && scroll_pressed) {
-        scroll_pressed = false;
-        if (!scroll_long_press_triggered) {
-            handle_button_press(true, true);
-        }
-    }
-    if (scroll_pressed && !scroll_long_press_triggered && (millis() - scroll_press_time >= long_press_duration)) {
-        handle_button_press(false, true);
-        scroll_long_press_triggered = true;
-    }
-
-    // --- State machine ---
-    bool should_refresh_for_marquee = false;
-    for (int i = 0; i < MAX_MARQUEE_LINES; i++) {
-        if (is_marquee_active[i]) {
-            should_refresh_for_marquee = true;
-            break;
-        }
-    }
-
-    if (should_refresh_for_marquee) {
-        ui_dirty = true;
-    }
-
-    switch (currentState) {
-        case STARTUP:
-            handle_startup();
-            break;
-        case BT_DISCOVERY:
-            handle_bt_discovery();
-            break;
-        case BT_CONNECTING:
-            handle_bt_connecting();
-            break;
-        case BT_RECONNECTING:
-            handle_bt_reconnecting();
-            break;
-        case SAMPLE_PLAYBACK:
-            handle_sample_playback();
-            break;
-        case ARTIST_SELECTION:
-            handle_artist_selection();
-            break;
-        case PLAYLIST_SELECTION:
-            handle_playlist_selection();
-            break;
-        case PLAYER:
-            handle_player();
-            break;
-        case SETTINGS:
-            handle_settings();
-            break;
-    }
-    delay(120);
+    // This loop runs on Core 1 and is intentionally left empty.
+    // The main application logic is now in app_loop(), which is pinned to Core 0.
+    // This dedicates Core 1 to the high-priority audio task.
+    vTaskDelay(portMAX_DELAY); // Sleep indefinitely
 }
 
 
