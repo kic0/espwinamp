@@ -13,6 +13,7 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
+#include "esp_wifi.h"
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -1482,7 +1483,7 @@ void draw_settings_ui() {
         display.print("IP: ");
         display.println(WiFi.softAPIP().toString());
         display.setCursor(0, 54);
-        display.print("> <- back");
+        display.print("> Disable AP & Back");
     } else {
         display.setCursor(0, 12);
         if (selected_setting == 0) display.print("> ");
@@ -1675,8 +1676,11 @@ void start_wifi_ap() {
 void stop_wifi_ap() {
     server.end();
     WiFi.softAPdisconnect(true);
-    WiFi.mode(WIFI_OFF);
+    esp_wifi_stop();
+    esp_wifi_deinit();
     wifi_ap_enabled = false;
+
+    delay(500); // Allow hardware to settle
 
     // Re-initialize Bluetooth
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
