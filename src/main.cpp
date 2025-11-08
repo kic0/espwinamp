@@ -312,6 +312,8 @@ void play_wav(String filename, unsigned long seek_position = 0);
 void play_mp3(String filename, unsigned long seek_position = 0);
 void play_song(Song song, unsigned long seek_position = 0);
 void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y);
+void start_wifi_ap();
+void stop_wifi_ap();
 
 void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset_ignored) {
     int display_lines = (currentState == PLAYER) ? 3 : 4;
@@ -516,6 +518,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             if (selected_bt_device == bt_devices.size()) {
                 previousState = currentState;
                 currentState = SETTINGS;
+                selected_setting = 0; // Reset selection in the settings menu
                 ui_dirty = true;
             } else if (!bt_devices.empty()) {
                 DiscoveredBTDevice selected_device = bt_devices[selected_bt_device];
@@ -563,6 +566,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             if (selected_artist == artists.size()) {
                 previousState = currentState;
                 currentState = SETTINGS;
+                selected_setting = 0; // Reset selection in the settings menu
                 ui_dirty = true;
             } else if (!artists.empty()) {
                 // Clear playlist data from any previous artist selection
@@ -647,43 +651,16 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             }
         } else if (is_scroll_button && !is_short_press) {
             if (wifi_ap_enabled) {
-                wifi_ap_enabled = false;
-                WiFi.softAPdisconnect(true);
-                WiFi.mode(WIFI_OFF);
-                btStop();
-                delay(1000);
-                esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-                esp_bt_controller_init(&bt_cfg);
-                esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT);
-                a2dp.start("winamp");
-                currentState = BT_DISCOVERY;
-                ui_dirty = true;
-            } else if (selected_setting == 0) { // toggle wifi
-                wifi_ap_enabled = true;
-                // Stop Bluetooth
-                a2dp.end(true);
-                delay(1000); // esp_bt_controller_disable seem to be an async call
-                esp_bt_controller_deinit();
-
-                // Start WiFi
-                File file = SPIFFS.open("/wifi_credentials.txt", "r");
-                if (file) {
-                    String ssid_line = file.readStringUntil('\n');
-                    String pass_line = file.readStringUntil('\n');
-                    file.close();
-
-                    wifi_ssid = ssid_line.substring(ssid_line.indexOf('=') + 1);
-                    wifi_password = pass_line.substring(pass_line.indexOf('=') + 1);
-                    wifi_ssid.trim();
-                    wifi_password.trim();
-
-                    WiFi.softAP(wifi_ssid.c_str(), wifi_password.c_str());
-                    server.begin();
-                }
-                ui_dirty = true;
-            } else if (selected_setting == 1) { // back
+                // Long press while AP is active always means "back"
+                stop_wifi_ap();
                 currentState = previousState;
-                ui_dirty = true;
+            } else {
+                if (selected_setting == 0) { // "Enable WiFi AP" is selected
+                    start_wifi_ap();
+                } else { // "<- back" is selected
+                    currentState = previousState;
+                    ui_dirty = true;
+                }
             }
         }
     }
@@ -1478,9 +1455,11 @@ void draw_settings_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
 
+    display.clearDisplay();
     draw_header("Settings");
 
     if (wifi_ap_enabled) {
+        display.drawBitmap(SCREEN_WIDTH - 30, 1, wifi_icon, 8, 8, SSD1306_BLACK);
         display.setCursor(0, 12);
         display.println("WiFi AP Enabled");
         display.setCursor(0, 22);
@@ -1491,14 +1470,14 @@ void draw_settings_ui() {
         display.println(wifi_password);
         display.setCursor(0, 42);
         display.print("IP: ");
-        display.print(WiFi.softAPIP());
+        display.println(WiFi.softAPIP().toString());
+        display.setCursor(0, 54);
+        display.print("> <- back");
     } else {
-        // WiFi AP: [Disabled]
         display.setCursor(0, 12);
         if (selected_setting == 0) display.print("> ");
-        display.print("WiFi AP: [Disabled]");
+        display.print("Enable WiFi AP");
 
-        // <- back
         display.setCursor(0, 22);
         if (selected_setting == 1) display.print("> ");
         display.print("<- back");
@@ -1508,53 +1487,8 @@ void draw_settings_ui() {
 
 
 void handle_settings() {
-    if (wifi_ap_enabled && WiFi.softAPgetStationNum() == 0) {
-        server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-            String html = "<html><body>";
-            html += "<h1>Winamp ESP32 File Manager</h1>";
-            html += "<form action='/upload' method='post' enctype='multipart/form-data'><input type='file' name='upload'><input type='submit' value='Upload'></form>";
-            html += "<h2>Files on SD Card:</h2>";
-            File root = SD.open("/");
-            File file = root.openNextFile();
-            while(file){
-                html += "<p>";
-                html += file.name();
-                html += " <a href='/delete?file=";
-                html += file.name();
-                html += "'>[Delete]</a></p>";
-                file = root.openNextFile();
-            }
-            root.close();
-            html += "</body></html>";
-            request->send(200, "text/html", html);
-        });
-
-        server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
-            request->send(200);
-        }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
-            if(!index){
-                String file_path = "/" + filename;
-                File file = SD.open(file_path, FILE_WRITE);
-                if(file){
-                    request->_tempFile = file;
-                }
-            }
-            if(len){
-                request->_tempFile.write(data, len);
-            }
-            if(final){
-                request->_tempFile.close();
-            }
-        });
-
-        server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){
-            if(request->hasParam("file")){
-                String file_path = "/" + request->getParam("file")->value();
-                SD.remove(file_path);
-            }
-            request->redirect("/");
-        });
-    }
+    // Web server is managed in the state transition.
+    // We just need to draw the UI.
     draw_settings_ui();
 }
 
@@ -1654,6 +1588,93 @@ void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y) {
     }
   }
   bmpFile.close();
+}
+
+void start_wifi_ap() {
+    // Stop Bluetooth
+    a2dp.end(true);
+    delay(1000);
+    esp_bt_controller_deinit();
+
+    // Start WiFi
+    File file = SPIFFS.open("/wifi_credentials.txt", "r");
+    if (file) {
+        String ssid_line = file.readStringUntil('\n');
+        String pass_line = file.readStringUntil('\n');
+        file.close();
+
+        wifi_ssid = ssid_line.substring(ssid_line.indexOf('=') + 1);
+        wifi_password = pass_line.substring(pass_line.indexOf('=') + 1);
+        wifi_ssid.trim();
+        wifi_password.trim();
+
+        WiFi.softAP(wifi_ssid.c_str(), wifi_password.c_str());
+
+        server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+            String html = "<html><body>";
+            html += "<h1>Winamp ESP32 File Manager</h1>";
+            html += "<form action='/upload' method='post' enctype='multipart/form-data'><input type='file' name='upload'><input type='submit' value='Upload'></form>";
+            html += "<h2>Files on SD Card:</h2>";
+            File root = SD.open("/");
+            File file = root.openNextFile();
+            while(file){
+                html += "<p>";
+                html += file.name();
+                html += " <a href='/delete?file=";
+                html += file.name();
+                html += "'>[Delete]</a></p>";
+                file = root.openNextFile();
+            }
+            root.close();
+            html += "</body></html>";
+            request->send(200, "text/html", html);
+        });
+
+        server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
+            request->send(200);
+        }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+            if(!index){
+                String file_path = "/" + filename;
+                File file = SD.open(file_path, FILE_WRITE);
+                if(file){
+                    request->_tempFile = file;
+                }
+            }
+            if(len){
+                request->_tempFile.write(data, len);
+            }
+            if(final){
+                request->_tempFile.close();
+            }
+        });
+
+        server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){
+            if(request->hasParam("file")){
+                String file_path = "/" + request->getParam("file")->value();
+                SD.remove(file_path);
+            }
+            request->redirect("/");
+        });
+
+        server.begin();
+    }
+    wifi_ap_enabled = true;
+    ui_dirty = true;
+}
+
+void stop_wifi_ap() {
+    server.end();
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_OFF);
+    wifi_ap_enabled = false;
+
+    // Re-initialize Bluetooth
+    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+    esp_bt_controller_init(&bt_cfg);
+    esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT);
+    a2dp.start("winamp");
+
+    ui_dirty = true;
 }
 
 
