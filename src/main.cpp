@@ -50,7 +50,7 @@ std::vector<Song> current_playlist_files;
 int current_song_index = 0;
 int selected_song_in_player = 0;
 int player_scroll_offset = 0;
-bool is_playing = true;
+bool is_playing = false;
 bool song_started = false;
 bool sample_started = false;
 bool ui_dirty = true;
@@ -298,13 +298,15 @@ void play_song(Song song, unsigned long seek_position = 0);
 void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y);
 
 void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset) {
+    int display_lines = (currentState == PLAYER) ? 3 : 4;
+
     if (selected_item >= item_count) {
         selected_item = 0;
     } else if (selected_item < 0) {
         selected_item = item_count - 1;
     }
 
-    if (item_count <= 4) {
+    if (item_count <= display_lines) {
         scroll_offset = 0;
         return;
     }
@@ -314,10 +316,10 @@ void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_off
         if (scroll_offset < 0) {
             scroll_offset = 0;
         }
-    } else if (selected_item >= scroll_offset + 4 - center_offset) {
-        scroll_offset = selected_item - (3 - center_offset);
-        if (scroll_offset > item_count - 4) {
-            scroll_offset = item_count - 4;
+    } else if (selected_item >= scroll_offset + display_lines - center_offset) {
+        scroll_offset = selected_item - (display_lines - 1 - center_offset);
+        if (scroll_offset > item_count - display_lines) {
+            scroll_offset = item_count - display_lines;
         }
     }
 }
@@ -1216,7 +1218,7 @@ void draw_player_ui() {
     // Playlist
     if (!current_playlist_files.empty()) {
         int list_size = current_playlist_files.size();
-        for (int i = player_scroll_offset; i < list_size + 1 && i < player_scroll_offset + 4; i++) {
+        for (int i = player_scroll_offset; i < list_size + 1 && i < player_scroll_offset + 3; i++) {
             int y_pos = 38 + (i - player_scroll_offset) * 10;
             int line_index = i - player_scroll_offset + 2;
 
