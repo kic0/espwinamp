@@ -83,8 +83,8 @@ volatile int diag_channels = 0;
 BluetoothA2DPSource a2dp;
 libhelix::MP3DecoderHelix decoder;
 File audioFile;
-uint8_t read_buffer[1024];
-int16_t pcm_buffer[4096];
+uint8_t read_buffer[2048];
+int16_t pcm_buffer[8192];
 int32_t pcm_buffer_len = 0;
 
 // Button states
@@ -499,7 +499,7 @@ void loop() {
             handle_settings();
             break;
     }
-    delay(50);
+    delay(10);
 }
 
 
