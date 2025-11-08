@@ -664,6 +664,22 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 a2dp.end(true);
                 delay(1000); // esp_bt_controller_disable seem to be an async call
                 esp_bt_controller_deinit();
+
+                // Start WiFi
+                File file = SPIFFS.open("/wifi_credentials.txt", "r");
+                if (file) {
+                    String ssid_line = file.readStringUntil('\n');
+                    String pass_line = file.readStringUntil('\n');
+                    file.close();
+
+                    wifi_ssid = ssid_line.substring(ssid_line.indexOf('=') + 1);
+                    wifi_password = pass_line.substring(pass_line.indexOf('=') + 1);
+                    wifi_ssid.trim();
+                    wifi_password.trim();
+
+                    WiFi.softAP(wifi_ssid.c_str(), wifi_password.c_str());
+                    server.begin();
+                }
                 ui_dirty = true;
             } else if (selected_setting == 1) { // back
                 currentState = previousState;
@@ -1493,70 +1509,51 @@ void draw_settings_ui() {
 
 void handle_settings() {
     if (wifi_ap_enabled && WiFi.softAPgetStationNum() == 0) {
-        // Start WiFi
-        File file = SPIFFS.open("/wifi_credentials.txt", "r");
-        if (file) {
-            wifi_ssid = file.readStringUntil('\n');
-            wifi_password = file.readStringUntil('\n');
-            String ssid_line = file.readStringUntil('\n');
-            String pass_line = file.readStringUntil('\n');
-            file.close();
+        server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+            String html = "<html><body>";
+            html += "<h1>Winamp ESP32 File Manager</h1>";
+            html += "<form action='/upload' method='post' enctype='multipart/form-data'><input type='file' name='upload'><input type='submit' value='Upload'></form>";
+            html += "<h2>Files on SD Card:</h2>";
+            File root = SD.open("/");
+            File file = root.openNextFile();
+            while(file){
+                html += "<p>";
+                html += file.name();
+                html += " <a href='/delete?file=";
+                html += file.name();
+                html += "'>[Delete]</a></p>";
+                file = root.openNextFile();
+            }
+            root.close();
+            html += "</body></html>";
+            request->send(200, "text/html", html);
+        });
 
-            wifi_ssid = ssid_line.substring(ssid_line.indexOf('=') + 1);
-            wifi_password = pass_line.substring(pass_line.indexOf('=') + 1);
-            wifi_ssid.trim();
-            wifi_password.trim();
-
-            WiFi.softAP(wifi_ssid.c_str(), wifi_password.c_str());
-
-            server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-                String html = "<html><body>";
-                html += "<h1>Winamp ESP32 File Manager</h1>";
-                html += "<form action='/upload' method='post' enctype='multipart/form-data'><input type='file' name='upload'><input type='submit' value='Upload'></form>";
-                html += "<h2>Files on SD Card:</h2>";
-                File root = SD.open("/");
-                File file = root.openNextFile();
-                while(file){
-                    html += "<p>";
-                    html += file.name();
-                    html += " <a href='/delete?file=";
-                    html += file.name();
-                    html += "'>[Delete]</a></p>";
-                    file = root.openNextFile();
+        server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
+            request->send(200);
+        }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+            if(!index){
+                String file_path = "/" + filename;
+                File file = SD.open(file_path, FILE_WRITE);
+                if(file){
+                    request->_tempFile = file;
                 }
-                root.close();
-                html += "</body></html>";
-                request->send(200, "text/html", html);
-            });
+            }
+            if(len){
+                request->_tempFile.write(data, len);
+            }
+            if(final){
+                request->_tempFile.close();
+            }
+        });
 
-            server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
-                request->send(200);
-            }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
-                if(!index){
-                    String file_path = "/" + filename;
-                    File file = SD.open(file_path, FILE_WRITE);
-                    if(file){
-                        request->_tempFile = file;
-                    }
-                }
-                if(len){
-                    request->_tempFile.write(data, len);
-                }
-                if(final){
-                    request->_tempFile.close();
-                }
-            });
-
-            server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){
-                if(request->hasParam("file")){
-                    String file_path = "/" + request->getParam("file")->value();
-                    SD.remove(file_path);
-                }
-                request->redirect("/");
-            });
-
-            server.begin();
-        }
+        server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){
+            if(request->hasParam("file")){
+                String file_path = "/" + request->getParam("file")->value();
+                SD.remove(file_path);
+            }
+            request->redirect("/");
+        });
     }
     draw_settings_ui();
 }
