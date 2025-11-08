@@ -7,14 +7,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "pins.h"
-#include "icons.h"
 #include "esp_gap_bt_api.h"
 #include <vector>
-#include "WifiAP.h"
-#include <WiFi.h>
-
-extern String wifi_ssid;
-extern String wifi_password;
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -55,7 +49,7 @@ std::vector<Song> current_playlist_files;
 int current_song_index = 0;
 int selected_song_in_player = 0;
 int player_scroll_offset = 0;
-bool is_playing = false;
+bool is_playing = true;
 bool song_started = false;
 bool sample_started = false;
 bool ui_dirty = true;
@@ -105,20 +99,11 @@ enum AppState {
   SAMPLE_PLAYBACK,
   ARTIST_SELECTION,
   PLAYLIST_SELECTION,
-  PLAYER,
-  SETTINGS
+  PLAYER
 };
 AppState currentState = STARTUP;
-AppState previousState = STARTUP;
-
-
-// ---------- Settings ----------
-int selected_setting = 0;
-bool wifi_ap_enabled = false;
-
 
 // forward declaration
-void app_loop(void *pvParameters);
 int32_t get_data_frames(Frame *frame, int32_t frame_count);
 void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, void *ref);
 void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr);
@@ -304,45 +289,34 @@ void handle_playlist_selection();
 void draw_playlist_ui();
 void handle_player();
 void draw_player_ui();
-void handle_settings();
-void draw_settings_ui();
-void draw_header(String title);
 void play_file(String filename, bool from_spiffs, unsigned long seek_position = 0);
 void play_wav(String filename, unsigned long seek_position = 0);
 void play_mp3(String filename, unsigned long seek_position = 0);
 void play_song(Song song, unsigned long seek_position = 0);
 void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y);
-void start_wifi_ap();
-void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset_ignored) {
-    int display_lines = (currentState == PLAYER) ? 3 : 4;
-    int center_offset = display_lines / 2;
 
-    // Wrap selection
+void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset) {
     if (selected_item >= item_count) {
         selected_item = 0;
     } else if (selected_item < 0) {
         selected_item = item_count - 1;
     }
 
-    // Don't scroll if all items fit
-    if (item_count <= display_lines) {
+    if (item_count <= 4) {
         scroll_offset = 0;
         return;
     }
 
-    // Determine if we need to scroll
     if (selected_item < scroll_offset + center_offset) {
         scroll_offset = selected_item - center_offset;
-    } else if (selected_item >= scroll_offset + display_lines - center_offset) {
-        scroll_offset = selected_item - (display_lines - 1 - center_offset);
-    }
-
-    // Clamp scroll_offset to bounds
-    if (scroll_offset < 0) {
-        scroll_offset = 0;
-    }
-    if (scroll_offset > item_count - display_lines) {
-        scroll_offset = item_count - display_lines;
+        if (scroll_offset < 0) {
+            scroll_offset = 0;
+        }
+    } else if (selected_item >= scroll_offset + 4 - center_offset) {
+        scroll_offset = selected_item - (3 - center_offset);
+        if (scroll_offset > item_count - 4) {
+            scroll_offset = item_count - 4;
+        }
     }
 }
 
@@ -399,8 +373,6 @@ void setup() {
     // 2. BT Init
     Serial.println("Starting A2DP source...");
     a2dp.set_on_connection_state_changed(bt_connection_state_cb);
-    a2dp.set_task_core(1);
-    a2dp.set_task_priority(2);
     a2dp.start("winamp");
     Serial.println("A2DP started, device name set to winamp");
 
@@ -431,97 +403,75 @@ void setup() {
     display.println("Winamp");
     display.display();
     delay(2000); // Display splash
-
-    // Create a task for the main application loop and pin it to Core 0
-    xTaskCreatePinnedToCore(
-        app_loop,   // Task function
-        "AppLoop",  // Name of the task
-        10000,      // Stack size in words
-        NULL,       // Task input parameter
-        1,          // Priority of the task
-        NULL,       // Task handle
-        0);         // Core where the task should run
 }
 
-
-void app_loop(void *pvParameters) {
-    for (;;) {
-        static unsigned long last_heap_log = 0;
-        if (millis() - last_heap_log > 2000) {
-            Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
-                          ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
-            last_heap_log = millis();
-        }
-        // --- Button handling ---
-        bool current_scroll = !digitalRead(BTN_SCROLL);
-
-        // Scroll button
-        if (current_scroll && !scroll_pressed) {
-            scroll_pressed = true;
-            scroll_press_time = millis();
-            scroll_long_press_triggered = false;
-        } else if (!current_scroll && scroll_pressed) {
-            scroll_pressed = false;
-            if (!scroll_long_press_triggered) {
-                handle_button_press(true, true);
-            }
-        }
-        if (scroll_pressed && !scroll_long_press_triggered && (millis() - scroll_press_time >= long_press_duration)) {
-            handle_button_press(false, true);
-            scroll_long_press_triggered = true;
-        }
-
-        // --- State machine ---
-        bool should_refresh_for_marquee = false;
-        for (int i = 0; i < MAX_MARQUEE_LINES; i++) {
-            if (is_marquee_active[i]) {
-                should_refresh_for_marquee = true;
-                break;
-            }
-        }
-
-        if (should_refresh_for_marquee) {
-            ui_dirty = true;
-        }
-
-        switch (currentState) {
-            case STARTUP:
-                handle_startup();
-                break;
-            case BT_DISCOVERY:
-                handle_bt_discovery();
-                break;
-            case BT_CONNECTING:
-                handle_bt_connecting();
-                break;
-            case BT_RECONNECTING:
-                handle_bt_reconnecting();
-                break;
-            case SAMPLE_PLAYBACK:
-                handle_sample_playback();
-                break;
-            case ARTIST_SELECTION:
-                handle_artist_selection();
-                break;
-            case PLAYLIST_SELECTION:
-                handle_playlist_selection();
-                break;
-            case PLAYER:
-                handle_player();
-                break;
-            case SETTINGS:
-                handle_settings();
-                break;
-        }
-        delay(120);
-    }
-}
 
 void loop() {
-    // This loop runs on Core 1 and is intentionally left empty.
-    // The main application logic is now in app_loop(), which is pinned to Core 0.
-    // This dedicates Core 1 to the high-priority audio task.
-    vTaskDelay(portMAX_DELAY); // Sleep indefinitely
+    static unsigned long last_heap_log = 0;
+    if (millis() - last_heap_log > 2000) {
+        Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
+                      ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
+        last_heap_log = millis();
+    }
+    // --- Button handling ---
+    bool current_scroll = !digitalRead(BTN_SCROLL);
+
+    // Scroll button
+    if (current_scroll && !scroll_pressed) {
+        scroll_pressed = true;
+        scroll_press_time = millis();
+        scroll_long_press_triggered = false;
+    } else if (!current_scroll && scroll_pressed) {
+        scroll_pressed = false;
+        if (!scroll_long_press_triggered) {
+            handle_button_press(true, true);
+        }
+    }
+    if (scroll_pressed && !scroll_long_press_triggered && (millis() - scroll_press_time >= long_press_duration)) {
+        handle_button_press(false, true);
+        scroll_long_press_triggered = true;
+    }
+
+    // --- State machine ---
+    bool should_refresh_for_marquee = false;
+    for (int i = 0; i < MAX_MARQUEE_LINES; i++) {
+        if (is_marquee_active[i]) {
+            should_refresh_for_marquee = true;
+            break;
+        }
+    }
+
+    if (should_refresh_for_marquee) {
+        ui_dirty = true;
+    }
+
+    switch (currentState) {
+        case STARTUP:
+            handle_startup();
+            break;
+        case BT_DISCOVERY:
+            handle_bt_discovery();
+            break;
+        case BT_CONNECTING:
+            handle_bt_connecting();
+            break;
+        case BT_RECONNECTING:
+            handle_bt_reconnecting();
+            break;
+        case SAMPLE_PLAYBACK:
+            handle_sample_playback();
+            break;
+        case ARTIST_SELECTION:
+            handle_artist_selection();
+            break;
+        case PLAYLIST_SELECTION:
+            handle_playlist_selection();
+            break;
+        case PLAYER:
+            handle_player();
+            break;
+    }
+    delay(50);
 }
 
 
@@ -531,15 +481,19 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
     if (currentState == BT_DISCOVERY) {
         if (is_scroll_button && is_short_press) { // Scroll with short press
             selected_bt_device++;
-            calculate_scroll_offset(selected_bt_device, bt_devices.size() + 1, bt_discovery_scroll_offset, 2);
+            if (selected_bt_device >= bt_devices.size()) {
+                selected_bt_device = 0;
+            }
+            // Simple viewport scrolling
+            if (selected_bt_device >= bt_discovery_scroll_offset + 4) {
+                bt_discovery_scroll_offset = selected_bt_device - 3;
+            }
+            if (selected_bt_device < bt_discovery_scroll_offset) {
+                bt_discovery_scroll_offset = selected_bt_device;
+            }
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
-            if (selected_bt_device == bt_devices.size()) {
-                previousState = currentState;
-                currentState = SETTINGS;
-                selected_setting = 0; // Reset selection in the settings menu
-                ui_dirty = true;
-            } else if (!bt_devices.empty()) {
+            if (!bt_devices.empty()) {
                 DiscoveredBTDevice selected_device = bt_devices[selected_bt_device];
                 Serial.printf("Selected device: %s\n", selected_device.name.c_str());
 
@@ -578,16 +532,11 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
     } else if (currentState == ARTIST_SELECTION) {
         if (is_scroll_button && is_short_press) { // Scroll with short press
             selected_artist++;
-            calculate_scroll_offset(selected_artist, artists.size() + 1, artist_scroll_offset, 2);
+            calculate_scroll_offset(selected_artist, artists.size(), artist_scroll_offset, 2);
             for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
-            if (selected_artist == artists.size()) {
-                previousState = currentState;
-                currentState = SETTINGS;
-                selected_setting = 0; // Reset selection in the settings menu
-                ui_dirty = true;
-            } else if (!artists.empty()) {
+            if (!artists.empty()) {
                 // Clear playlist data from any previous artist selection
                 playlists.clear();
                 selected_playlist = 0;
@@ -660,25 +609,6 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             } else if (current_song_index != selected_song_in_player || !song_started) {
                 current_song_index = selected_song_in_player;
                 play_song(current_playlist_files[current_song_index], 0);
-            }
-        }
-    } else if (currentState == SETTINGS) {
-        if (is_scroll_button && is_short_press) {
-            if (!wifi_ap_enabled) {
-                selected_setting = (selected_setting + 1) % 2;
-                ui_dirty = true;
-            }
-        } else if (is_scroll_button && !is_short_press) {
-            if (wifi_ap_enabled) {
-                // Long press while AP is active always means "back"
-                ESP.restart();
-            } else {
-                if (selected_setting == 0) { // "Enable WiFi AP" is selected
-                    start_wifi_ap();
-                } else { // "<- back" is selected
-                    currentState = previousState;
-                    ui_dirty = true;
-                }
             }
         }
     }
@@ -838,7 +768,10 @@ void handle_bt_discovery() {
 
 void handle_bt_connecting() {
     display.clearDisplay();
-    draw_header("Connecting...");
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("Connecting...");
     display.display();
 
     if (is_bt_connected) {
@@ -891,22 +824,21 @@ void handle_bt_reconnecting() {
 
 
 void handle_sample_playback() {
+    // Static variables are used here to maintain state across loop() calls.
+    // They are initialized once when the function is first called and retain their values.
+    // splash_start_time is reset to 0 when this state is exited, ensuring a clean start next time.
     static unsigned long splash_start_time = 0;
     static bool sound_started = false;
 
-    // Initialization step
+    // Initialization step (runs only once)
     if (splash_start_time == 0) {
         splash_start_time = millis();
         sound_started = false;
-        ui_dirty = true; // Force a redraw on first entry
-    }
 
-    if (ui_dirty) {
+        // Display splash screen
         display.clearDisplay();
-        draw_header("Winamp"); // Add a header for consistency
-        draw_bitmap_from_spiffs("/splash.bmp", 10, 12); // Adjust y-pos for header
+        draw_bitmap_from_spiffs("/splash.bmp", 10, 0);
         display.display();
-        ui_dirty = false;
     }
 
     // Check for BT disconnection
@@ -925,17 +857,11 @@ void handle_sample_playback() {
     if (millis() - splash_start_time >= 5000 && !sound_started) {
         play_file("/sample.mp3", true);
         sound_started = true;
-        is_playing = true;
-        song_started = true; // Use song_started to be consistent with main player
     }
 
-    bool song_finished = sound_started && audioFile && !audioFile.available();
-    bool timeout_reached = millis() - splash_start_time >= 20000;
-
-    // Transition when song finishes or timeout is reached
-    if (song_finished || timeout_reached) {
-        if(song_finished) Serial.println("Sample playback finished.");
-        if(timeout_reached) Serial.println("Sample playback timed out.");
+    // After 15 seconds, move to the next state
+    if (millis() - splash_start_time >= 15000) {
+        Serial.println("Splash screen finished.");
 
         // Stop sample playback if it's still going
         if (sound_started && audioFile) {
@@ -949,10 +875,7 @@ void handle_sample_playback() {
         // Reset state for next time
         splash_start_time = 0;
         sound_started = false;
-        is_playing = false;
-        song_started = false;
 
-        // Transition to the next state
         playlist_scroll_offset = 0;
         ui_dirty = true;
         currentState = ARTIST_SELECTION;
@@ -1044,63 +967,31 @@ void scan_artists() {
     }
 }
 
-void draw_header(String title) {
-    display.fillRect(0, 0, SCREEN_WIDTH, 10, SSD1306_WHITE);
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_BLACK);
-    display.setCursor(2, 2);
-    display.print(title);
-
-    if (is_bt_connected) {
-        display.drawBitmap(SCREEN_WIDTH - 20, 1, bt_icon, 8, 8, SSD1306_BLACK);
-    }
-    if (is_playing) {
-        display.drawBitmap(SCREEN_WIDTH - 10, 1, play_icon, 8, 8, SSD1306_BLACK);
-    }
-
-    display.setTextColor(SSD1306_WHITE); // Reset text color for the rest of the UI
-}
-
 void draw_bt_discovery_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    draw_header("Select BT Speaker");
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0,0);
+    display.print("Select BT Speaker:");
+    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
-    int list_size = bt_devices.size();
-    int total_items = list_size + 1;
-
-    // Display list
-    for (int i = 0; i < 4; i++) {
-        int item_index = bt_discovery_scroll_offset + i;
-        if (item_index >= total_items) break;
-
-        int y_pos = 12 + i * 10;
-        String name;
-        if (item_index == list_size) {
-            name = "-> Settings";
-        } else {
-            name = bt_devices[item_index].name;
-        }
-
-        if (item_index == selected_bt_device) {
-            display.setCursor(0, y_pos);
-            display.print("> ");
-            draw_dynamic_text(name, y_pos, 12, true, i + 1);
-        } else {
-            draw_dynamic_text(name, y_pos, 12, false, i + 1);
-        }
-    }
-
-    if (list_size == 0) {
+    if (bt_devices.empty()) {
         display.setCursor(0, 26);
-        if (is_scanning) {
-            display.print("Scanning...");
-        } else {
-            display.print("No devices found.");
+        display.print("Scanning...");
+    } else {
+        for (int i = bt_discovery_scroll_offset; i < bt_devices.size() && i < bt_discovery_scroll_offset + 4; i++) {
+            int y_pos = 26 + (i - bt_discovery_scroll_offset) * 10;
+            display.setCursor(0, y_pos);
+            if (i == selected_bt_device) {
+                display.print("> ");
+            } else {
+                display.print("  ");
+            }
+            display.print(bt_devices[i].name.c_str());
         }
     }
-
     display.display();
 }
 
@@ -1196,21 +1087,19 @@ void draw_artist_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    draw_header("Select Artist");
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+
+    draw_dynamic_text("Select Artist:", 0, 0, false, 0);
+    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
     if (artists.empty()) {
         display.setCursor(0, 26);
         display.print("No artists found!");
     } else {
-        int list_size = artists.size();
-        for (int i = artist_scroll_offset; i < list_size + 1 && i < artist_scroll_offset + 4; i++) {
-            int y_pos = 12 + (i - artist_scroll_offset) * 10;
-            String name;
-            if (i == list_size) {
-                name = "-> Settings";
-            } else {
-                name = artists[i];
-            }
+        for (int i = artist_scroll_offset; i < artists.size() && i < artist_scroll_offset + 4; i++) {
+            int y_pos = 26 + (i - artist_scroll_offset) * 10;
+            String name = artists[i];
             int line_index = i - artist_scroll_offset + 1;
             if (i == selected_artist) {
                 display.setCursor(0, y_pos);
@@ -1242,7 +1131,11 @@ void draw_playlist_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    draw_header("Select Playlist");
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+
+    draw_dynamic_text("Select Playlist:", 0, 0, false, 0);
+    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
     if (playlists.empty()) {
         display.setCursor(0, 26);
@@ -1294,14 +1187,15 @@ void draw_player_ui() {
     ui_dirty = false;
 
     display.clearDisplay();
-    draw_header("Now Playing");
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
 
     // Header
     String artist_name = artists[selected_artist];
     String album_name = playlists[selected_playlist];
     String header_text = artist_name + " - " + album_name;
-    draw_dynamic_text(header_text, 12, 0, true, 0);
-    display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
+    draw_dynamic_text(header_text, 0, 0, true, 0);
+    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
     // Currently Playing Song
     if (!current_playlist_files.empty()) {
@@ -1312,15 +1206,15 @@ void draw_player_ui() {
         }
         playing_song.replace(".mp3", "");
         playing_song.replace(".wav", "");
-        draw_dynamic_text(">> " + playing_song, 24, 0, true, 1);
+        draw_dynamic_text(">> " + playing_song, 12, 0, true, 1);
     }
-    display.drawLine(0, 34, 127, 34, SSD1306_WHITE);
+    display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
 
     // Playlist
     if (!current_playlist_files.empty()) {
         int list_size = current_playlist_files.size();
-        for (int i = player_scroll_offset; i < list_size + 1 && i < player_scroll_offset + 3; i++) {
-            int y_pos = 38 + (i - player_scroll_offset) * 10;
+        for (int i = player_scroll_offset; i < list_size + 1 && i < player_scroll_offset + 4; i++) {
+            int y_pos = 26 + (i - player_scroll_offset) * 10;
             int line_index = i - player_scroll_offset + 2;
 
             if (i == list_size) { // After the last song, show "back"
@@ -1489,48 +1383,6 @@ void handle_player() {
     draw_player_ui();
 }
 
-void draw_settings_ui() {
-    if (!ui_dirty) return;
-    ui_dirty = false;
-
-    display.clearDisplay();
-    draw_header("Settings");
-
-    if (wifi_ap_enabled) {
-        display.drawBitmap(SCREEN_WIDTH - 30, 1, wifi_icon, 8, 8, SSD1306_BLACK);
-        display.setCursor(0, 12);
-        display.println("WiFi AP Enabled");
-        display.setCursor(0, 22);
-        display.print("SSID: ");
-        display.println(wifi_ssid);
-        display.setCursor(0, 32);
-        display.print("Pass: ");
-        display.println(wifi_password);
-        display.setCursor(0, 42);
-        display.print("IP: ");
-        display.println(WiFi.softAPIP().toString());
-        display.setCursor(0, 54);
-        display.print("> Disable AP & Back");
-    } else {
-        display.setCursor(0, 12);
-        if (selected_setting == 0) display.print("> ");
-        display.print("Enable WiFi AP");
-
-        display.setCursor(0, 22);
-        if (selected_setting == 1) display.print("> ");
-        display.print("<- back");
-    }
-    display.display();
-}
-
-
-void handle_settings() {
-    // Web server is managed in the state transition.
-    // We just need to draw the UI.
-    draw_settings_ui();
-}
-
-
 // Helper function to read a 16-bit value from a file
 uint16_t read16(File &f) {
   uint16_t result;
@@ -1627,6 +1479,7 @@ void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y) {
   }
   bmpFile.close();
 }
+
 
 void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr){
     Serial.printf("A2DP connection state changed: %d\n", state);
