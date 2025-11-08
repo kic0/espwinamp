@@ -7,6 +7,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "pins.h"
+#include "icons.h"
 #include "esp_gap_bt_api.h"
 #include <vector>
 
@@ -289,6 +290,7 @@ void handle_playlist_selection();
 void draw_playlist_ui();
 void handle_player();
 void draw_player_ui();
+void draw_header(String title);
 void play_file(String filename, bool from_spiffs, unsigned long seek_position = 0);
 void play_wav(String filename, unsigned long seek_position = 0);
 void play_mp3(String filename, unsigned long seek_position = 0);
@@ -768,10 +770,7 @@ void handle_bt_discovery() {
 
 void handle_bt_connecting() {
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.println("Connecting...");
+    draw_header("Connecting...");
     display.display();
 
     if (is_bt_connected) {
@@ -967,15 +966,28 @@ void scan_artists() {
     }
 }
 
+void draw_header(String title) {
+    display.fillRect(0, 0, SCREEN_WIDTH, 10, SSD1306_WHITE);
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_BLACK);
+    display.setCursor(2, 2);
+    display.print(title);
+
+    if (is_bt_connected) {
+        display.drawBitmap(SCREEN_WIDTH - 20, 1, bt_icon, 8, 8, SSD1306_BLACK);
+    }
+    if (is_playing) {
+        display.drawBitmap(SCREEN_WIDTH - 10, 1, play_icon, 8, 8, SSD1306_BLACK);
+    }
+
+    display.setTextColor(SSD1306_WHITE); // Reset text color for the rest of the UI
+}
+
 void draw_bt_discovery_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0,0);
-    display.print("Select BT Speaker:");
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_header("Select BT Speaker");
 
     if (bt_devices.empty()) {
         display.setCursor(0, 26);
@@ -1087,11 +1099,7 @@ void draw_artist_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-
-    draw_dynamic_text("Select Artist:", 0, 0, false, 0);
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_header("Select Artist");
 
     if (artists.empty()) {
         display.setCursor(0, 26);
@@ -1131,11 +1139,7 @@ void draw_playlist_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-
-    draw_dynamic_text("Select Playlist:", 0, 0, false, 0);
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_header("Select Playlist");
 
     if (playlists.empty()) {
         display.setCursor(0, 26);
@@ -1187,15 +1191,14 @@ void draw_player_ui() {
     ui_dirty = false;
 
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
+    draw_header("Now Playing");
 
     // Header
     String artist_name = artists[selected_artist];
     String album_name = playlists[selected_playlist];
     String header_text = artist_name + " - " + album_name;
-    draw_dynamic_text(header_text, 0, 0, true, 0);
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_dynamic_text(header_text, 12, 0, true, 0);
+    display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
 
     // Currently Playing Song
     if (!current_playlist_files.empty()) {
@@ -1206,15 +1209,15 @@ void draw_player_ui() {
         }
         playing_song.replace(".mp3", "");
         playing_song.replace(".wav", "");
-        draw_dynamic_text(">> " + playing_song, 12, 0, true, 1);
+        draw_dynamic_text(">> " + playing_song, 24, 0, true, 1);
     }
-    display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
+    display.drawLine(0, 34, 127, 34, SSD1306_WHITE);
 
     // Playlist
     if (!current_playlist_files.empty()) {
         int list_size = current_playlist_files.size();
         for (int i = player_scroll_offset; i < list_size + 1 && i < player_scroll_offset + 4; i++) {
-            int y_pos = 26 + (i - player_scroll_offset) * 10;
+            int y_pos = 38 + (i - player_scroll_offset) * 10;
             int line_index = i - player_scroll_offset + 2;
 
             if (i == list_size) { // After the last song, show "back"
