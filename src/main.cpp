@@ -7,8 +7,13 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "pins.h"
+#include "icons.h"
 #include "esp_gap_bt_api.h"
 #include <vector>
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncTCP.h>
+#include "esp_wifi.h"
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -49,7 +54,7 @@ std::vector<Song> current_playlist_files;
 int current_song_index = 0;
 int selected_song_in_player = 0;
 int player_scroll_offset = 0;
-bool is_playing = true;
+bool is_playing = false;
 bool song_started = false;
 bool sample_started = false;
 bool ui_dirty = true;
@@ -99,9 +104,20 @@ enum AppState {
   SAMPLE_PLAYBACK,
   ARTIST_SELECTION,
   PLAYLIST_SELECTION,
-  PLAYER
+  PLAYER,
+  SETTINGS
 };
 AppState currentState = STARTUP;
+AppState previousState = STARTUP;
+
+
+// ---------- Settings ----------
+int selected_setting = 0;
+bool wifi_ap_enabled = false;
+AsyncWebServer server(80);
+String wifi_ssid;
+String wifi_password;
+
 
 // forward declaration
 int32_t get_data_frames(Frame *frame, int32_t frame_count);
@@ -289,34 +305,45 @@ void handle_playlist_selection();
 void draw_playlist_ui();
 void handle_player();
 void draw_player_ui();
+void handle_settings();
+void draw_settings_ui();
+void draw_header(String title);
 void play_file(String filename, bool from_spiffs, unsigned long seek_position = 0);
 void play_wav(String filename, unsigned long seek_position = 0);
 void play_mp3(String filename, unsigned long seek_position = 0);
 void play_song(Song song, unsigned long seek_position = 0);
 void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y);
+void start_wifi_ap();
+void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset_ignored) {
+    int display_lines = (currentState == PLAYER) ? 3 : 4;
+    int center_offset = display_lines / 2;
 
-void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset) {
+    // Wrap selection
     if (selected_item >= item_count) {
         selected_item = 0;
     } else if (selected_item < 0) {
         selected_item = item_count - 1;
     }
 
-    if (item_count <= 4) {
+    // Don't scroll if all items fit
+    if (item_count <= display_lines) {
         scroll_offset = 0;
         return;
     }
 
+    // Determine if we need to scroll
     if (selected_item < scroll_offset + center_offset) {
         scroll_offset = selected_item - center_offset;
-        if (scroll_offset < 0) {
-            scroll_offset = 0;
-        }
-    } else if (selected_item >= scroll_offset + 4 - center_offset) {
-        scroll_offset = selected_item - (3 - center_offset);
-        if (scroll_offset > item_count - 4) {
-            scroll_offset = item_count - 4;
-        }
+    } else if (selected_item >= scroll_offset + display_lines - center_offset) {
+        scroll_offset = selected_item - (display_lines - 1 - center_offset);
+    }
+
+    // Clamp scroll_offset to bounds
+    if (scroll_offset < 0) {
+        scroll_offset = 0;
+    }
+    if (scroll_offset > item_count - display_lines) {
+        scroll_offset = item_count - display_lines;
     }
 }
 
@@ -470,6 +497,9 @@ void loop() {
         case PLAYER:
             handle_player();
             break;
+        case SETTINGS:
+            handle_settings();
+            break;
     }
     delay(50);
 }
@@ -481,19 +511,15 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
     if (currentState == BT_DISCOVERY) {
         if (is_scroll_button && is_short_press) { // Scroll with short press
             selected_bt_device++;
-            if (selected_bt_device >= bt_devices.size()) {
-                selected_bt_device = 0;
-            }
-            // Simple viewport scrolling
-            if (selected_bt_device >= bt_discovery_scroll_offset + 4) {
-                bt_discovery_scroll_offset = selected_bt_device - 3;
-            }
-            if (selected_bt_device < bt_discovery_scroll_offset) {
-                bt_discovery_scroll_offset = selected_bt_device;
-            }
+            calculate_scroll_offset(selected_bt_device, bt_devices.size() + 1, bt_discovery_scroll_offset, 2);
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
-            if (!bt_devices.empty()) {
+            if (selected_bt_device == bt_devices.size()) {
+                previousState = currentState;
+                currentState = SETTINGS;
+                selected_setting = 0; // Reset selection in the settings menu
+                ui_dirty = true;
+            } else if (!bt_devices.empty()) {
                 DiscoveredBTDevice selected_device = bt_devices[selected_bt_device];
                 Serial.printf("Selected device: %s\n", selected_device.name.c_str());
 
@@ -532,11 +558,16 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
     } else if (currentState == ARTIST_SELECTION) {
         if (is_scroll_button && is_short_press) { // Scroll with short press
             selected_artist++;
-            calculate_scroll_offset(selected_artist, artists.size(), artist_scroll_offset, 2);
+            calculate_scroll_offset(selected_artist, artists.size() + 1, artist_scroll_offset, 2);
             for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
-            if (!artists.empty()) {
+            if (selected_artist == artists.size()) {
+                previousState = currentState;
+                currentState = SETTINGS;
+                selected_setting = 0; // Reset selection in the settings menu
+                ui_dirty = true;
+            } else if (!artists.empty()) {
                 // Clear playlist data from any previous artist selection
                 playlists.clear();
                 selected_playlist = 0;
@@ -609,6 +640,25 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             } else if (current_song_index != selected_song_in_player || !song_started) {
                 current_song_index = selected_song_in_player;
                 play_song(current_playlist_files[current_song_index], 0);
+            }
+        }
+    } else if (currentState == SETTINGS) {
+        if (is_scroll_button && is_short_press) {
+            if (!wifi_ap_enabled) {
+                selected_setting = (selected_setting + 1) % 2;
+                ui_dirty = true;
+            }
+        } else if (is_scroll_button && !is_short_press) {
+            if (wifi_ap_enabled) {
+                // Long press while AP is active always means "back"
+                ESP.restart();
+            } else {
+                if (selected_setting == 0) { // "Enable WiFi AP" is selected
+                    start_wifi_ap();
+                } else { // "<- back" is selected
+                    currentState = previousState;
+                    ui_dirty = true;
+                }
             }
         }
     }
@@ -768,10 +818,7 @@ void handle_bt_discovery() {
 
 void handle_bt_connecting() {
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.println("Connecting...");
+    draw_header("Connecting...");
     display.display();
 
     if (is_bt_connected) {
@@ -824,21 +871,22 @@ void handle_bt_reconnecting() {
 
 
 void handle_sample_playback() {
-    // Static variables are used here to maintain state across loop() calls.
-    // They are initialized once when the function is first called and retain their values.
-    // splash_start_time is reset to 0 when this state is exited, ensuring a clean start next time.
     static unsigned long splash_start_time = 0;
     static bool sound_started = false;
 
-    // Initialization step (runs only once)
+    // Initialization step
     if (splash_start_time == 0) {
         splash_start_time = millis();
         sound_started = false;
+        ui_dirty = true; // Force a redraw on first entry
+    }
 
-        // Display splash screen
+    if (ui_dirty) {
         display.clearDisplay();
-        draw_bitmap_from_spiffs("/splash.bmp", 10, 0);
+        draw_header("Winamp"); // Add a header for consistency
+        draw_bitmap_from_spiffs("/splash.bmp", 10, 12); // Adjust y-pos for header
         display.display();
+        ui_dirty = false;
     }
 
     // Check for BT disconnection
@@ -857,11 +905,17 @@ void handle_sample_playback() {
     if (millis() - splash_start_time >= 5000 && !sound_started) {
         play_file("/sample.mp3", true);
         sound_started = true;
+        is_playing = true;
+        song_started = true; // Use song_started to be consistent with main player
     }
 
-    // After 15 seconds, move to the next state
-    if (millis() - splash_start_time >= 15000) {
-        Serial.println("Splash screen finished.");
+    bool song_finished = sound_started && audioFile && !audioFile.available();
+    bool timeout_reached = millis() - splash_start_time >= 20000;
+
+    // Transition when song finishes or timeout is reached
+    if (song_finished || timeout_reached) {
+        if(song_finished) Serial.println("Sample playback finished.");
+        if(timeout_reached) Serial.println("Sample playback timed out.");
 
         // Stop sample playback if it's still going
         if (sound_started && audioFile) {
@@ -875,7 +929,10 @@ void handle_sample_playback() {
         // Reset state for next time
         splash_start_time = 0;
         sound_started = false;
+        is_playing = false;
+        song_started = false;
 
+        // Transition to the next state
         playlist_scroll_offset = 0;
         ui_dirty = true;
         currentState = ARTIST_SELECTION;
@@ -967,31 +1024,63 @@ void scan_artists() {
     }
 }
 
+void draw_header(String title) {
+    display.fillRect(0, 0, SCREEN_WIDTH, 10, SSD1306_WHITE);
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_BLACK);
+    display.setCursor(2, 2);
+    display.print(title);
+
+    if (is_bt_connected) {
+        display.drawBitmap(SCREEN_WIDTH - 20, 1, bt_icon, 8, 8, SSD1306_BLACK);
+    }
+    if (is_playing) {
+        display.drawBitmap(SCREEN_WIDTH - 10, 1, play_icon, 8, 8, SSD1306_BLACK);
+    }
+
+    display.setTextColor(SSD1306_WHITE); // Reset text color for the rest of the UI
+}
+
 void draw_bt_discovery_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0,0);
-    display.print("Select BT Speaker:");
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_header("Select BT Speaker");
 
-    if (bt_devices.empty()) {
-        display.setCursor(0, 26);
-        display.print("Scanning...");
-    } else {
-        for (int i = bt_discovery_scroll_offset; i < bt_devices.size() && i < bt_discovery_scroll_offset + 4; i++) {
-            int y_pos = 26 + (i - bt_discovery_scroll_offset) * 10;
+    int list_size = bt_devices.size();
+    int total_items = list_size + 1;
+
+    // Display list
+    for (int i = 0; i < 4; i++) {
+        int item_index = bt_discovery_scroll_offset + i;
+        if (item_index >= total_items) break;
+
+        int y_pos = 12 + i * 10;
+        String name;
+        if (item_index == list_size) {
+            name = "-> Settings";
+        } else {
+            name = bt_devices[item_index].name;
+        }
+
+        if (item_index == selected_bt_device) {
             display.setCursor(0, y_pos);
-            if (i == selected_bt_device) {
-                display.print("> ");
-            } else {
-                display.print("  ");
-            }
-            display.print(bt_devices[i].name.c_str());
+            display.print("> ");
+            draw_dynamic_text(name, y_pos, 12, true, i + 1);
+        } else {
+            draw_dynamic_text(name, y_pos, 12, false, i + 1);
         }
     }
+
+    if (list_size == 0) {
+        display.setCursor(0, 26);
+        if (is_scanning) {
+            display.print("Scanning...");
+        } else {
+            display.print("No devices found.");
+        }
+    }
+
     display.display();
 }
 
@@ -1087,19 +1176,21 @@ void draw_artist_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-
-    draw_dynamic_text("Select Artist:", 0, 0, false, 0);
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_header("Select Artist");
 
     if (artists.empty()) {
         display.setCursor(0, 26);
         display.print("No artists found!");
     } else {
-        for (int i = artist_scroll_offset; i < artists.size() && i < artist_scroll_offset + 4; i++) {
-            int y_pos = 26 + (i - artist_scroll_offset) * 10;
-            String name = artists[i];
+        int list_size = artists.size();
+        for (int i = artist_scroll_offset; i < list_size + 1 && i < artist_scroll_offset + 4; i++) {
+            int y_pos = 12 + (i - artist_scroll_offset) * 10;
+            String name;
+            if (i == list_size) {
+                name = "-> Settings";
+            } else {
+                name = artists[i];
+            }
             int line_index = i - artist_scroll_offset + 1;
             if (i == selected_artist) {
                 display.setCursor(0, y_pos);
@@ -1131,11 +1222,7 @@ void draw_playlist_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-
-    draw_dynamic_text("Select Playlist:", 0, 0, false, 0);
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_header("Select Playlist");
 
     if (playlists.empty()) {
         display.setCursor(0, 26);
@@ -1187,15 +1274,14 @@ void draw_player_ui() {
     ui_dirty = false;
 
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
+    draw_header("Now Playing");
 
     // Header
     String artist_name = artists[selected_artist];
     String album_name = playlists[selected_playlist];
     String header_text = artist_name + " - " + album_name;
-    draw_dynamic_text(header_text, 0, 0, true, 0);
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_dynamic_text(header_text, 12, 0, true, 0);
+    display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
 
     // Currently Playing Song
     if (!current_playlist_files.empty()) {
@@ -1206,15 +1292,15 @@ void draw_player_ui() {
         }
         playing_song.replace(".mp3", "");
         playing_song.replace(".wav", "");
-        draw_dynamic_text(">> " + playing_song, 12, 0, true, 1);
+        draw_dynamic_text(">> " + playing_song, 24, 0, true, 1);
     }
-    display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
+    display.drawLine(0, 34, 127, 34, SSD1306_WHITE);
 
     // Playlist
     if (!current_playlist_files.empty()) {
         int list_size = current_playlist_files.size();
-        for (int i = player_scroll_offset; i < list_size + 1 && i < player_scroll_offset + 4; i++) {
-            int y_pos = 26 + (i - player_scroll_offset) * 10;
+        for (int i = player_scroll_offset; i < list_size + 1 && i < player_scroll_offset + 3; i++) {
+            int y_pos = 38 + (i - player_scroll_offset) * 10;
             int line_index = i - player_scroll_offset + 2;
 
             if (i == list_size) { // After the last song, show "back"
@@ -1383,6 +1469,48 @@ void handle_player() {
     draw_player_ui();
 }
 
+void draw_settings_ui() {
+    if (!ui_dirty) return;
+    ui_dirty = false;
+
+    display.clearDisplay();
+    draw_header("Settings");
+
+    if (wifi_ap_enabled) {
+        display.drawBitmap(SCREEN_WIDTH - 30, 1, wifi_icon, 8, 8, SSD1306_BLACK);
+        display.setCursor(0, 12);
+        display.println("WiFi AP Enabled");
+        display.setCursor(0, 22);
+        display.print("SSID: ");
+        display.println(wifi_ssid);
+        display.setCursor(0, 32);
+        display.print("Pass: ");
+        display.println(wifi_password);
+        display.setCursor(0, 42);
+        display.print("IP: ");
+        display.println(WiFi.softAPIP().toString());
+        display.setCursor(0, 54);
+        display.print("> Disable AP & Back");
+    } else {
+        display.setCursor(0, 12);
+        if (selected_setting == 0) display.print("> ");
+        display.print("Enable WiFi AP");
+
+        display.setCursor(0, 22);
+        if (selected_setting == 1) display.print("> ");
+        display.print("<- back");
+    }
+    display.display();
+}
+
+
+void handle_settings() {
+    // Web server is managed in the state transition.
+    // We just need to draw the UI.
+    draw_settings_ui();
+}
+
+
 // Helper function to read a 16-bit value from a file
 uint16_t read16(File &f) {
   uint16_t result;
@@ -1478,6 +1606,200 @@ void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y) {
     }
   }
   bmpFile.close();
+}
+
+void start_wifi_ap() {
+    // Stop Bluetooth
+    a2dp.end(true);
+    delay(1000);
+    esp_bt_controller_deinit();
+
+    // Start WiFi
+    File file = SPIFFS.open("/wifi_credentials.txt", "r");
+    if (file) {
+        String ssid_line = file.readStringUntil('\n');
+        String pass_line = file.readStringUntil('\n');
+        file.close();
+
+        wifi_ssid = ssid_line.substring(ssid_line.indexOf('=') + 1);
+        wifi_password = pass_line.substring(pass_line.indexOf('=') + 1);
+        wifi_ssid.trim();
+        wifi_password.trim();
+
+        WiFi.softAP(wifi_ssid.c_str(), wifi_password.c_str());
+
+        server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+            String path = "/";
+            if (request->hasParam("path")) {
+                path = request->getParam("path")->value();
+            }
+
+            String html = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<title>Winamp ESP32 File Manager</title>
+<style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #E0E0E0; margin: 0; padding: 20px; }
+    .container { max-width: 800px; margin: auto; background-color: #1E1E1E; border: 1px solid #333; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+    .header { background-color: #2A2A2A; color: #FFF; padding: 10px 15px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { margin: 0; font-size: 1.2em; }
+    .sd-info { padding: 5px 15px; background-color: #252525; font-size: 0.8em; }
+    .file-list { padding: 15px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #2A2A2A; }
+    th { background-color: #252525; }
+    a { color: #87CEEB; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .action-links a { color: #FF6347; margin-left: 10px; }
+    .forms-container { display: flex; justify-content: space-between; padding: 15px; background-color: #252525; border-top: 1px solid #333; }
+    .upload-form, .mkdir-form { flex-basis: 48%; }
+    input[type=file], input[type=submit], input[type=text] { background-color: #333; color: #E0E0E0; border: 1px solid #555; padding: 8px; width: calc(100% - 18px); }
+    input[type=submit] { cursor: pointer; width: 100%; }
+    .path-bar { padding: 5px 15px; background-color: #2A2A2A; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Winamp ESP32 File Manager</h1>
+    </div>
+)rawliteral";
+
+            uint64_t total_bytes = SD.cardSize();
+            uint64_t used_bytes = SD.usedBytes();
+            String sd_info = "SD Card: " + String((float)used_bytes / 1024 / 1024, 2) + " MB used / " + String((float)total_bytes / 1024 / 1024, 2) + " MB total";
+
+            html += "<div class='sd-info'>" + sd_info + "</div>";
+            html += "<div class='path-bar'>Current Path: " + path + "</div>";
+            html += "<div class='file-list'><table><tr><th>Name</th><th>Size</th><th>Actions</th></tr>";
+
+            if (path != "/") {
+                String parent_path = path.substring(0, path.lastIndexOf('/'));
+                if (parent_path == "") parent_path = "/";
+                html += "<tr><td><a href='/?path=" + parent_path + "'>..</a></td><td></td><td></td></tr>";
+            }
+
+            File root = SD.open(path);
+            File file = root.openNextFile();
+            while(file){
+                String file_name = String(file.name());
+                String file_path = path == "/" ? "/" + file_name : path + "/" + file_name;
+
+                if (file.isDirectory()) {
+                    html += "<tr><td><a href='/?path=" + file_path + "'>" + file_name + "/</a></td><td>-</td><td class='action-links'><a href='/delete?file=" + file_path + "'>Delete</a></td></tr>";
+                } else {
+                    html += "<tr><td>" + file_name + "</td><td>" + String(file.size()) + "</td><td class='action-links'><a href='/delete?file=" + file_path + "'>Delete</a></td></tr>";
+                }
+                file = root.openNextFile();
+            }
+            root.close();
+
+            html += R"rawliteral(
+</table></div>
+<div class="forms-container">
+    <div class="upload-form">
+        <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="path" value=")rawliteral" + path + R"rawliteral(">
+            <input type="file" name="upload" multiple>
+            <input type="submit" value="Upload">
+        </form>
+        <div id="upload-status" style="display: none; color: #87CEEB; margin-top: 10px;">Uploading, please wait...</div>
+    </div>
+    <div class="mkdir-form">
+        <form action="/mkdir" method="get">
+            <input type="hidden" name="path" value=")rawliteral" + path + R"rawliteral(">
+            <input type="text" name="dirname" placeholder="New folder name">
+            <input type="submit" value="Create Folder">
+        </form>
+    </div>
+</div>
+</div>
+<script>
+    document.getElementById('upload-form').addEventListener('submit', function() {
+        document.getElementById('upload-status').style.display = 'block';
+        this.querySelector('input[type=submit]').disabled = true;
+    });
+</script>
+</body>
+</html>
+)rawliteral";
+            request->send(200, "text/html", html);
+        });
+
+        server.on("/upload", HTTP_POST,
+            [](AsyncWebServerRequest *request){
+                String path = "/";
+                if(request->hasParam("path", true)) {
+                    path = request->getParam("path", true)->value();
+                }
+                request->redirect("/?path=" + path);
+            },
+            [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+                String path = "/";
+                if(request->hasParam("path", true)) {
+                    path = request->getParam("path", true)->value();
+                }
+
+                if(!index){
+                    String file_path;
+                    if (path == "/") {
+                        file_path = "/" + filename;
+                    } else {
+                        file_path = path + "/" + filename;
+                    }
+                    request->_tempFile = SD.open(file_path, FILE_WRITE);
+                }
+                if(len && request->_tempFile){
+                    request->_tempFile.write(data, len);
+                }
+                if(final && request->_tempFile){
+                    request->_tempFile.close();
+                }
+            }
+        );
+
+        server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){
+            String path = "/";
+            if (request->hasParam("file")) {
+                String file_path = request->getParam("file")->value();
+
+                int last_slash = file_path.lastIndexOf('/');
+                if (last_slash > 0) {
+                    path = file_path.substring(0, last_slash);
+                }
+
+                if (SD.remove(file_path)) {
+                    // file deleted
+                } else if (SD.rmdir(file_path)) {
+                    // directory deleted
+                }
+            }
+            request->redirect("/?path=" + path);
+        });
+
+        server.on("/mkdir", HTTP_GET, [](AsyncWebServerRequest *request){
+            String path = "/";
+            if (request->hasParam("path")) {
+                path = request->getParam("path")->value();
+            }
+            if (request->hasParam("dirname")) {
+                String dirname = request->getParam("dirname")->value();
+                String dir_path;
+                if (path == "/") {
+                    dir_path = "/" + dirname;
+                } else {
+                    dir_path = path + "/" + dirname;
+                }
+                SD.mkdir(dir_path);
+            }
+            request->redirect("/?path=" + path);
+        });
+
+        server.begin();
+    }
+    wifi_ap_enabled = true;
+    ui_dirty = true;
 }
 
 

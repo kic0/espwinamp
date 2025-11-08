@@ -6,6 +6,7 @@ This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD c
 
 - **Bluetooth A2DP Source:** Streams audio to any A2DP-compatible speaker or headphones.
 - **SD Card Support:** Music is organized in an `Artist -> Album` folder structure on the SD card.
+- **Unified UI with Status Icons:** The user interface features a consistent header across all screens with status icons for Bluetooth connection, audio playback, and WiFi AP mode.
 - **OLED Display Interface:** A 128x64 SSD1306 OLED screen displays a Winamp-themed user interface.
 - **Single-Button Control:** All user input is handled by the single 'BOOT' button (GPIO 0), which supports short and long presses.
 - **State Machine Logic:** The application is built around a robust state machine that handles Bluetooth discovery, connection, and multiple playback states.
@@ -15,6 +16,32 @@ This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD c
 - **Robust Reconnection Logic:** When the Bluetooth connection is lost, the device displays a "Reconnecting..." message and attempts to reconnect for 15 seconds before falling back to the device discovery screen.
 - **Winamp-Themed Bitmap and Sound Splash Screen:** Displays a custom `splash.bmp` image from the SPIFFS filesystem on startup and plays a `sample.mp3` also from the SPIFFS filesystem /data folder.
 - **PlatformIO Build System:** The project is built using PlatformIO, which automatically manages all dependencies.
+
+## WiFi File Manager
+
+The device includes a WiFi Access Point mode that serves a web-based file manager, allowing you to manage the music files on your SD card wirelessly.
+
+### Enabling the WiFi AP
+
+1.  From the **Bluetooth Discovery** or **Artist Selection** screens, long-press the 'BOOT' button on the "-> Settings" option.
+2.  On the **Settings** screen, select "Enable WiFi AP" with a short press and confirm with a long press.
+3.  The device will start a WiFi network with the credentials specified in the `data/wifi_credentials.txt` file. The default credentials are:
+    *   **SSID:** `winampesp`
+    *   **Password:** `1234567890`
+4.  Connect to this network and navigate to `http://192.168.4.1` in your web browser.
+
+### Features
+
+The web file manager provides the following features:
+- **SD Card Storage Info:** Displays the total and used space on the SD card.
+- **Directory Navigation:** Browse through the folders on your SD card.
+- **Create Folders:** Create new folders in the current directory.
+- **Upload Files:** Upload multiple music files at once to the current directory.
+- **Delete Files/Folders:** Remove files and folders from the SD card.
+
+### Exiting WiFi AP Mode
+
+To disable the WiFi AP and return to Bluetooth mode, select the "Disable AP & Back" option on the device's settings screen. The device will reboot and start in Bluetooth discovery mode.
 
 ## Hardware Requirements
 
