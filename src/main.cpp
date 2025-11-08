@@ -297,30 +297,36 @@ void play_mp3(String filename, unsigned long seek_position = 0);
 void play_song(Song song, unsigned long seek_position = 0);
 void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y);
 
-void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset) {
+void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset_ignored) {
     int display_lines = (currentState == PLAYER) ? 3 : 4;
+    int center_offset = display_lines / 2;
 
+    // Wrap selection
     if (selected_item >= item_count) {
         selected_item = 0;
     } else if (selected_item < 0) {
         selected_item = item_count - 1;
     }
 
+    // Don't scroll if all items fit
     if (item_count <= display_lines) {
         scroll_offset = 0;
         return;
     }
 
+    // Determine if we need to scroll
     if (selected_item < scroll_offset + center_offset) {
         scroll_offset = selected_item - center_offset;
-        if (scroll_offset < 0) {
-            scroll_offset = 0;
-        }
     } else if (selected_item >= scroll_offset + display_lines - center_offset) {
         scroll_offset = selected_item - (display_lines - 1 - center_offset);
-        if (scroll_offset > item_count - display_lines) {
-            scroll_offset = item_count - display_lines;
-        }
+    }
+
+    // Clamp scroll_offset to bounds
+    if (scroll_offset < 0) {
+        scroll_offset = 0;
+    }
+    if (scroll_offset > item_count - display_lines) {
+        scroll_offset = item_count - display_lines;
     }
 }
 
