@@ -17,6 +17,15 @@ This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD c
 - **Winamp-Themed Bitmap and Sound Splash Screen:** Displays a custom `splash.bmp` image from the SPIFFS filesystem on startup and plays a `sample.mp3` also from the SPIFFS filesystem /data folder.
 - **PlatformIO Build System:** The project is built using PlatformIO, which automatically manages all dependencies.
 
+## Hardware Requirements
+
+| Component           | Connection                  |
+| ------------------- | --------------------------- |
+| **ESP32 DEVKIT**    | -                           |
+| **OLED Display**    | SDA: GPIO 16, SCL: GPIO 17  |
+| **SD Card Reader**  | CS: GPIO 5, SCK: GPIO 18, MOSI: GPIO 23, MISO: GPIO 19 |
+| **'BOOT' Button**   | GPIO 0 (built-in)           |
+
 ## WiFi File Manager
 
 The device includes a WiFi Access Point mode that serves a web-based file manager, allowing you to manage the music files on your SD card wirelessly.
@@ -42,15 +51,6 @@ The web file manager provides the following features:
 ### Exiting WiFi AP Mode
 
 To disable the WiFi AP and return to Bluetooth mode, select the "Disable AP & Back" option on the device's settings screen. The device will reboot and start in Bluetooth discovery mode.
-
-## Hardware Requirements
-
-| Component           | Connection                  |
-| ------------------- | --------------------------- |
-| **ESP32 DEVKIT**    | -                           |
-| **OLED Display**    | SDA: GPIO 16, SCL: GPIO 17  |
-| **SD Card Reader**  | CS: GPIO 5, SCK: GPIO 18, MOSI: GPIO 23, MISO: GPIO 19 |
-| **'BOOT' Button**   | GPIO 0 (built-in)           |
 
 ## Software Dependencies
 
@@ -120,7 +120,6 @@ To upload the `sample.mp3` and `splash.bmp` files to the ESP32's internal flash,
 ./build.sh --uploadfs
 ```
 
-
 ### Erase and Flash
 
 If you are flashing for the first time or have changed the partition table, you should erase the flash memory before uploading the new firmware.
@@ -132,17 +131,12 @@ If you are flashing for the first time or have changed the partition table, you 
 ```
 You will be prompted to power-cycle the device during the erase process. Follow the on-screen instructions.
 
-
-
 ### TODO
 
 1. 3D printed case
 2. Add a batery 
 3. Add moar buttons for better UI/control
-4. Wifi AP for lazy management of mp3 files in the SDcard
-5. Add a minijack for wired headphones/speakers with a MAX98357A (not sure we have enough power for this tho)
-
-
+4. Add a minijack for wired headphones/speakers with a MAX98357A (not sure we have enough power for this tho)
 
 ### Disclaimer 
 
