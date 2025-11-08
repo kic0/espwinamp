@@ -314,8 +314,6 @@ void play_mp3(String filename, unsigned long seek_position = 0);
 void play_song(Song song, unsigned long seek_position = 0);
 void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y);
 void start_wifi_ap();
-void stop_wifi_ap();
-
 void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset_ignored) {
     int display_lines = (currentState == PLAYER) ? 3 : 4;
     int center_offset = display_lines / 2;
@@ -653,8 +651,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
         } else if (is_scroll_button && !is_short_press) {
             if (wifi_ap_enabled) {
                 // Long press while AP is active always means "back"
-                stop_wifi_ap();
-                currentState = previousState;
+                ESP.restart();
             } else {
                 if (selected_setting == 0) { // "Enable WiFi AP" is selected
                     start_wifi_ap();
@@ -1647,6 +1644,7 @@ void start_wifi_ap() {
     .container { max-width: 800px; margin: auto; background-color: #1E1E1E; border: 1px solid #333; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
     .header { background-color: #2A2A2A; color: #FFF; padding: 10px 15px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
     .header h1 { margin: 0; font-size: 1.2em; }
+    .sd-info { padding: 5px 15px; background-color: #252525; font-size: 0.8em; }
     .file-list { padding: 15px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: 8px; border-bottom: 1px solid #2A2A2A; }
@@ -1654,9 +1652,10 @@ void start_wifi_ap() {
     a { color: #87CEEB; text-decoration: none; }
     a:hover { text-decoration: underline; }
     .action-links a { color: #FF6347; margin-left: 10px; }
-    .upload-form { padding: 15px; background-color: #252525; border-top: 1px solid #333; }
-    input[type=file], input[type=submit] { background-color: #333; color: #E0E0E0; border: 1px solid #555; padding: 8px; }
-    input[type=submit] { cursor: pointer; }
+    .forms-container { display: flex; justify-content: space-between; padding: 15px; background-color: #252525; border-top: 1px solid #333; }
+    .upload-form, .mkdir-form { flex-basis: 48%; }
+    input[type=file], input[type=submit], input[type=text] { background-color: #333; color: #E0E0E0; border: 1px solid #555; padding: 8px; width: calc(100% - 18px); }
+    input[type=submit] { cursor: pointer; width: 100%; }
     .path-bar { padding: 5px 15px; background-color: #2A2A2A; font-size: 0.9em; }
 </style>
 </head>
@@ -1667,6 +1666,11 @@ void start_wifi_ap() {
     </div>
 )rawliteral";
 
+            uint64_t total_bytes = SD.cardSize();
+            uint64_t used_bytes = SD.usedBytes();
+            String sd_info = "SD Card: " + String((float)used_bytes / 1024 / 1024, 2) + " MB used / " + String((float)total_bytes / 1024 / 1024, 2) + " MB total";
+
+            html += "<div class='sd-info'>" + sd_info + "</div>";
             html += "<div class='path-bar'>Current Path: " + path + "</div>";
             html += "<div class='file-list'><table><tr><th>Name</th><th>Size</th><th>Actions</th></tr>";
 
@@ -1693,14 +1697,30 @@ void start_wifi_ap() {
 
             html += R"rawliteral(
 </table></div>
-<div class="upload-form">
-    <form action="/upload" method="post" enctype="multipart/form-data">
-        <input type="hidden" name="path" value=")rawliteral" + path + R"rawliteral(">
-        <input type="file" name="upload">
-        <input type="submit" value="Upload">
-    </form>
+<div class="forms-container">
+    <div class="upload-form">
+        <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="path" value=")rawliteral" + path + R"rawliteral(">
+            <input type="file" name="upload" multiple>
+            <input type="submit" value="Upload">
+        </form>
+        <div id="upload-status" style="display: none; color: #87CEEB; margin-top: 10px;">Uploading, please wait...</div>
+    </div>
+    <div class="mkdir-form">
+        <form action="/mkdir" method="get">
+            <input type="hidden" name="path" value=")rawliteral" + path + R"rawliteral(">
+            <input type="text" name="dirname" placeholder="New folder name">
+            <input type="submit" value="Create Folder">
+        </form>
+    </div>
 </div>
 </div>
+<script>
+    document.getElementById('upload-form').addEventListener('submit', function() {
+        document.getElementById('upload-status').style.display = 'block';
+        this.querySelector('input[type=submit]').disabled = true;
+    });
+</script>
 </body>
 </html>
 )rawliteral";
@@ -1758,27 +1778,27 @@ void start_wifi_ap() {
             request->redirect("/?path=" + path);
         });
 
+        server.on("/mkdir", HTTP_GET, [](AsyncWebServerRequest *request){
+            String path = "/";
+            if (request->hasParam("path")) {
+                path = request->getParam("path")->value();
+            }
+            if (request->hasParam("dirname")) {
+                String dirname = request->getParam("dirname")->value();
+                String dir_path;
+                if (path == "/") {
+                    dir_path = "/" + dirname;
+                } else {
+                    dir_path = path + "/" + dirname;
+                }
+                SD.mkdir(dir_path);
+            }
+            request->redirect("/?path=" + path);
+        });
+
         server.begin();
     }
     wifi_ap_enabled = true;
-    ui_dirty = true;
-}
-
-void stop_wifi_ap() {
-    server.end();
-    WiFi.softAPdisconnect(true);
-    esp_wifi_stop();
-    esp_wifi_deinit();
-    wifi_ap_enabled = false;
-
-    delay(500); // Allow hardware to settle
-
-    // Re-initialize Bluetooth
-    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    esp_bt_controller_init(&bt_cfg);
-    esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT);
-    a2dp.start("winamp");
-
     ui_dirty = true;
 }
 
