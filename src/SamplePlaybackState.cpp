@@ -32,6 +32,7 @@ State* SamplePlaybackState::loop(AppContext& context) {
     // Timeout for the whole process
     if (millis() - start_time >= 10000) { // 10-second timeout
         Log::printf("Sample playback timed out. Continuing...\n");
+        stop_audio_playback(context);
         return new ArtistSelectionState();
     }
 

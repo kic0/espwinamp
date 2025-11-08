@@ -102,6 +102,7 @@ void setup() {
     SPIFFS.begin(true);
 
     context.audio_task_semaphore = xSemaphoreCreateBinary();
+    context.pcm_buffer_mutex = xSemaphoreCreateMutex();
 
     xTaskCreatePinnedToCore(
         audioTask, "AudioTask", 10240, NULL, 1, &context.audioTaskHandle, 1

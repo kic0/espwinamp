@@ -65,7 +65,7 @@ public:
 
     // --- Task Handles & Mutex for Core 1 ---
     TaskHandle_t audioTaskHandle = NULL;
-    portMUX_TYPE pcm_buffer_mutex = portMUX_INITIALIZER_UNLOCKED;
+    SemaphoreHandle_t pcm_buffer_mutex = NULL;
     SemaphoreHandle_t audio_task_semaphore = NULL;
     TaskHandle_t wifiTaskHandle = NULL;
     volatile bool wifi_task_should_stop = false;
