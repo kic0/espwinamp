@@ -1050,30 +1050,40 @@ void draw_bt_discovery_ui() {
     display.clearDisplay();
     draw_header("Select BT Speaker");
 
-    if (bt_devices.empty()) {
-        display.setCursor(0, 26);
-        display.print("Scanning...");
-    } else {
-        int list_size = bt_devices.size();
-        for (int i = bt_discovery_scroll_offset; i < list_size + 1 && i < bt_discovery_scroll_offset + 4; i++) {
-            int y_pos = 12 + (i - bt_discovery_scroll_offset) * 10;
-            if (i == list_size) { // "Settings" option
-                if (i == selected_bt_device) {
-                    display.setCursor(0, y_pos);
-                    display.print("> ");
-                }
-                draw_dynamic_text("-> Settings", y_pos, 12, false, i - bt_discovery_scroll_offset + 1);
-            } else {
-                display.setCursor(0, y_pos);
-                if (i == selected_bt_device) {
-                    display.print("> ");
-                } else {
-                    display.print("  ");
-                }
-                display.print(bt_devices[i].name.c_str());
-            }
+    int list_size = bt_devices.size();
+    int total_items = list_size + 1;
+
+    // Display list
+    for (int i = 0; i < 4; i++) {
+        int item_index = bt_discovery_scroll_offset + i;
+        if (item_index >= total_items) break;
+
+        int y_pos = 12 + i * 10;
+        String name;
+        if (item_index == list_size) {
+            name = "-> Settings";
+        } else {
+            name = bt_devices[item_index].name;
+        }
+
+        if (item_index == selected_bt_device) {
+            display.setCursor(0, y_pos);
+            display.print("> ");
+            draw_dynamic_text(name, y_pos, 12, true, i + 1);
+        } else {
+            draw_dynamic_text(name, y_pos, 12, false, i + 1);
         }
     }
+
+    if (list_size == 0) {
+        display.setCursor(0, 26);
+        if (is_scanning) {
+            display.print("Scanning...");
+        } else {
+            display.print("No devices found.");
+        }
+    }
+
     display.display();
 }
 
@@ -1622,49 +1632,130 @@ void start_wifi_ap() {
         WiFi.softAP(wifi_ssid.c_str(), wifi_password.c_str());
 
         server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-            String html = "<html><body>";
-            html += "<h1>Winamp ESP32 File Manager</h1>";
-            html += "<form action='/upload' method='post' enctype='multipart/form-data'><input type='file' name='upload'><input type='submit' value='Upload'></form>";
-            html += "<h2>Files on SD Card:</h2>";
-            File root = SD.open("/");
+            String path = "/";
+            if (request->hasParam("path")) {
+                path = request->getParam("path")->value();
+            }
+
+            String html = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<title>Winamp ESP32 File Manager</title>
+<style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #E0E0E0; margin: 0; padding: 20px; }
+    .container { max-width: 800px; margin: auto; background-color: #1E1E1E; border: 1px solid #333; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+    .header { background-color: #2A2A2A; color: #FFF; padding: 10px 15px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { margin: 0; font-size: 1.2em; }
+    .file-list { padding: 15px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #2A2A2A; }
+    th { background-color: #252525; }
+    a { color: #87CEEB; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .action-links a { color: #FF6347; margin-left: 10px; }
+    .upload-form { padding: 15px; background-color: #252525; border-top: 1px solid #333; }
+    input[type=file], input[type=submit] { background-color: #333; color: #E0E0E0; border: 1px solid #555; padding: 8px; }
+    input[type=submit] { cursor: pointer; }
+    .path-bar { padding: 5px 15px; background-color: #2A2A2A; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Winamp ESP32 File Manager</h1>
+    </div>
+)rawliteral";
+
+            html += "<div class='path-bar'>Current Path: " + path + "</div>";
+            html += "<div class='file-list'><table><tr><th>Name</th><th>Size</th><th>Actions</th></tr>";
+
+            if (path != "/") {
+                String parent_path = path.substring(0, path.lastIndexOf('/'));
+                if (parent_path == "") parent_path = "/";
+                html += "<tr><td><a href='/?path=" + parent_path + "'>..</a></td><td></td><td></td></tr>";
+            }
+
+            File root = SD.open(path);
             File file = root.openNextFile();
             while(file){
-                html += "<p>";
-                html += file.name();
-                html += " <a href='/delete?file=";
-                html += file.name();
-                html += "'>[Delete]</a></p>";
+                String file_name = String(file.name());
+                String file_path = path == "/" ? "/" + file_name : path + "/" + file_name;
+
+                if (file.isDirectory()) {
+                    html += "<tr><td><a href='/?path=" + file_path + "'>" + file_name + "/</a></td><td>-</td><td class='action-links'><a href='/delete?file=" + file_path + "'>Delete</a></td></tr>";
+                } else {
+                    html += "<tr><td>" + file_name + "</td><td>" + String(file.size()) + "</td><td class='action-links'><a href='/delete?file=" + file_path + "'>Delete</a></td></tr>";
+                }
                 file = root.openNextFile();
             }
             root.close();
-            html += "</body></html>";
+
+            html += R"rawliteral(
+</table></div>
+<div class="upload-form">
+    <form action="/upload" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="path" value=")rawliteral" + path + R"rawliteral(">
+        <input type="file" name="upload">
+        <input type="submit" value="Upload">
+    </form>
+</div>
+</div>
+</body>
+</html>
+)rawliteral";
             request->send(200, "text/html", html);
         });
 
-        server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
-            request->send(200);
-        }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
-            if(!index){
-                String file_path = "/" + filename;
-                File file = SD.open(file_path, FILE_WRITE);
-                if(file){
-                    request->_tempFile = file;
+        server.on("/upload", HTTP_POST,
+            [](AsyncWebServerRequest *request){
+                String path = "/";
+                if(request->hasParam("path", true)) {
+                    path = request->getParam("path", true)->value();
+                }
+                request->redirect("/?path=" + path);
+            },
+            [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+                String path = "/";
+                if(request->hasParam("path", true)) {
+                    path = request->getParam("path", true)->value();
+                }
+
+                if(!index){
+                    String file_path;
+                    if (path == "/") {
+                        file_path = "/" + filename;
+                    } else {
+                        file_path = path + "/" + filename;
+                    }
+                    request->_tempFile = SD.open(file_path, FILE_WRITE);
+                }
+                if(len && request->_tempFile){
+                    request->_tempFile.write(data, len);
+                }
+                if(final && request->_tempFile){
+                    request->_tempFile.close();
                 }
             }
-            if(len){
-                request->_tempFile.write(data, len);
-            }
-            if(final){
-                request->_tempFile.close();
-            }
-        });
+        );
 
         server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){
-            if(request->hasParam("file")){
-                String file_path = "/" + request->getParam("file")->value();
-                SD.remove(file_path);
+            String path = "/";
+            if (request->hasParam("file")) {
+                String file_path = request->getParam("file")->value();
+
+                int last_slash = file_path.lastIndexOf('/');
+                if (last_slash > 0) {
+                    path = file_path.substring(0, last_slash);
+                }
+
+                if (SD.remove(file_path)) {
+                    // file deleted
+                } else if (SD.rmdir(file_path)) {
+                    // directory deleted
+                }
             }
-            request->redirect("/");
+            request->redirect("/?path=" + path);
         });
 
         server.begin();
