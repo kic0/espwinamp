@@ -79,22 +79,7 @@ void start_wifi_ap() {
             } else {
                 current_path = "/";
             }
-
-            File file = SPIFFS.open("/index.html", "r");
-            if (!file) {
-                request->send(500, "text/plain", "Failed to open index.html");
-                return;
-            }
-
-            String template_str = file.readString();
-            file.close();
-
-            // Manually process the template
-            template_str.replace("%%PATH%%", processor("PATH"));
-            template_str.replace("%%SD_INFO%%", processor("SD_INFO"));
-            template_str.replace("%%FILE_LIST%%", processor("FILE_LIST"));
-
-            request->send(200, "text/html", template_str);
+            request->send(SPIFFS, "/index.html", "text/html", false, processor);
         });
 
         server.on("/upload", HTTP_POST,

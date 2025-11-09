@@ -398,6 +398,8 @@ void setup() {
     // 2. BT Init
     Serial.println("Starting A2DP source...");
     a2dp.set_on_connection_state_changed(bt_connection_state_cb);
+    a2dp.set_task_core(1);
+    a2dp.set_task_priority(2);
     a2dp.start("winamp");
     Serial.println("A2DP started, device name set to winamp");
 
