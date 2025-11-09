@@ -1,3 +1,4 @@
+/*
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
@@ -156,3 +157,4 @@ void start_wifi_ap() {
     wifi_ap_enabled = true;
     ui_dirty = true;
 }
+*/
