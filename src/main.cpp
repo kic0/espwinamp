@@ -10,12 +10,12 @@
 #include "icons.h"
 #include "esp_gap_bt_api.h"
 #include <vector>
-#include "WifiAP.h"
-#include <WiFi.h>
+// #include "WifiAP.h"
+// #include <WiFi.h>
 #include "esp_a2dp_api.h"
 
-extern String wifi_ssid;
-extern String wifi_password;
+// extern String wifi_ssid;
+// extern String wifi_password;
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -80,6 +80,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 volatile int diag_sample_rate = 0;
 volatile int diag_bits_per_sample = 0;
 volatile int diag_channels = 0;
+int current_volume = 64; // Default volume 0-127
 
 BluetoothA2DPSource a2dp;
 libhelix::MP3DecoderHelix decoder;
@@ -106,8 +107,8 @@ enum AppState {
   SAMPLE_PLAYBACK,
   ARTIST_SELECTION,
   PLAYLIST_SELECTION,
-  PLAYER,
-  SETTINGS
+  PLAYER
+  // SETTINGS
 };
 AppState currentState = STARTUP;
 AppState previousState = STARTUP;
@@ -304,15 +305,15 @@ void handle_playlist_selection();
 void draw_playlist_ui();
 void handle_player();
 void draw_player_ui();
-void handle_settings();
-void draw_settings_ui();
+// void handle_settings();
+// void draw_settings_ui();
 void draw_header(String title);
 void play_file(String filename, bool from_spiffs, unsigned long seek_position = 0);
 void play_wav(String filename, unsigned long seek_position = 0);
 void play_mp3(String filename, unsigned long seek_position = 0);
 void play_song(Song song, unsigned long seek_position = 0);
 void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y);
-void start_wifi_ap();
+// void start_wifi_ap();
 void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset_ignored) {
     int display_lines = (currentState == PLAYER) ? 3 : 4;
     int center_offset = display_lines / 2;
@@ -435,12 +436,12 @@ void setup() {
 
 
 void loop() {
-    static unsigned long last_heap_log = 0;
-    if (millis() - last_heap_log > 2000) {
-        Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
-                      ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
-        last_heap_log = millis();
-    }
+    // static unsigned long last_heap_log = 0;
+    // if (millis() - last_heap_log > 2000) {
+    //     Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
+    //                   ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
+    //     last_heap_log = millis();
+    // }
     // --- Button handling ---
     bool current_scroll = !digitalRead(BTN_SCROLL);
 
@@ -498,9 +499,9 @@ void loop() {
         case PLAYER:
             handle_player();
             break;
-        case SETTINGS:
-            handle_settings();
-            break;
+        // case SETTINGS:
+        //     handle_settings();
+        //     break;
     }
     delay(120);
 }
@@ -512,15 +513,10 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
     if (currentState == BT_DISCOVERY) {
         if (is_scroll_button && is_short_press) { // Scroll with short press
             selected_bt_device++;
-            calculate_scroll_offset(selected_bt_device, bt_devices.size() + 1, bt_discovery_scroll_offset, 2);
+            calculate_scroll_offset(selected_bt_device, bt_devices.size(), bt_discovery_scroll_offset, 2);
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
-            if (selected_bt_device == bt_devices.size()) {
-                previousState = currentState;
-                currentState = SETTINGS;
-                selected_setting = 0; // Reset selection in the settings menu
-                ui_dirty = true;
-            } else if (!bt_devices.empty()) {
+            if (!bt_devices.empty()) {
                 DiscoveredBTDevice selected_device = bt_devices[selected_bt_device];
                 Serial.printf("Selected device: %s\n", selected_device.name.c_str());
 
@@ -559,16 +555,11 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
     } else if (currentState == ARTIST_SELECTION) {
         if (is_scroll_button && is_short_press) { // Scroll with short press
             selected_artist++;
-            calculate_scroll_offset(selected_artist, artists.size() + 1, artist_scroll_offset, 2);
+            calculate_scroll_offset(selected_artist, artists.size(), artist_scroll_offset, 2);
             for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
-            if (selected_artist == artists.size()) {
-                previousState = currentState;
-                currentState = SETTINGS;
-                selected_setting = 0; // Reset selection in the settings menu
-                ui_dirty = true;
-            } else if (!artists.empty()) {
+            if (!artists.empty()) {
                 // Clear playlist data from any previous artist selection
                 playlists.clear();
                 selected_playlist = 0;
@@ -643,26 +634,29 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 play_song(current_playlist_files[current_song_index], 0);
             }
         }
-    } else if (currentState == SETTINGS) {
+    }
+    /*
+    else if (currentState == SETTINGS) {
         if (is_scroll_button && is_short_press) {
             if (!wifi_ap_enabled) {
                 selected_setting = (selected_setting + 1) % 2;
-                ui_dirty = true;
-            }
-        } else if (is_scroll_button && !is_short_press) {
-            if (wifi_ap_enabled) {
-                // Long press while AP is active always means "back"
-                ESP.restart();
-            } else {
-                if (selected_setting == 0) { // "Enable WiFi AP" is selected
-                    start_wifi_ap();
-                } else { // "<- back" is selected
-                    currentState = previousState;
-                    ui_dirty = true;
-                }
-            }
-        }
-    }
+    //             ui_dirty = true;
+    //         }
+    //     } else if (is_scroll_button && !is_short_press) {
+    //         // if (wifi_ap_enabled) {
+    //         //     // Long press while AP is active always means "back"
+    //         //     ESP.restart();
+    //         // } else {
+    //         //     if (selected_setting == 0) { // "Enable WiFi AP" is selected
+    //         //         // start_wifi_ap();
+    //         //     } else { // "<- back" is selected
+    //         //         currentState = previousState;
+    //         //         ui_dirty = true;
+    //         //     }
+    //         // }
+    //     }
+    // }
+    */
 }
 
 
@@ -825,7 +819,7 @@ void handle_bt_connecting() {
     if (is_bt_connected) {
         Serial.println("Connection established.");
         is_connecting = false;
-        a2dp.set_volume(64); // Set volume to 50%
+        a2dp.set_volume(current_volume);
         if (paused_song_index != -1) {
             currentState = PLAYER;
         } else {
@@ -1032,11 +1026,29 @@ void draw_header(String title) {
     display.setCursor(2, 2);
     display.print(title);
 
-    if (is_bt_connected) {
-        display.drawBitmap(SCREEN_WIDTH - 20, 1, bt_icon, 8, 8, SSD1306_BLACK);
-    }
+    const int padding = 2;
+    int current_x = SCREEN_WIDTH;
+
+    // Draw Volume (right-most item)
+    int volume_percent = (current_volume * 100) / 127;
+    String volume_str = String(volume_percent) + "%";
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(volume_str, 0, 0, &x1, &y1, &w, &h);
+    current_x -= w;
+    display.setCursor(current_x, 2);
+    display.print(volume_str);
+
+    // Draw Play icon
     if (is_playing) {
-        display.drawBitmap(SCREEN_WIDTH - 10, 1, play_icon, 8, 8, SSD1306_BLACK);
+        current_x -= (padding + 8); // padding + icon width
+        display.drawBitmap(current_x, 1, play_icon, 8, 8, SSD1306_BLACK);
+    }
+
+    // Draw BT icon
+    if (is_bt_connected) {
+        current_x -= (padding + 8); // padding + icon width
+        display.drawBitmap(current_x, 1, bt_icon, 8, 8, SSD1306_BLACK);
     }
 
     display.setTextColor(SSD1306_WHITE); // Reset text color for the rest of the UI
@@ -1049,7 +1061,7 @@ void draw_bt_discovery_ui() {
     draw_header("Select BT Speaker");
 
     int list_size = bt_devices.size();
-    int total_items = list_size + 1;
+    int total_items = list_size;
 
     // Display list
     for (int i = 0; i < 4; i++) {
@@ -1058,11 +1070,7 @@ void draw_bt_discovery_ui() {
 
         int y_pos = 12 + i * 10;
         String name;
-        if (item_index == list_size) {
-            name = "-> Settings";
-        } else {
-            name = bt_devices[item_index].name;
-        }
+        name = bt_devices[item_index].name;
 
         if (item_index == selected_bt_device) {
             display.setCursor(0, y_pos);
@@ -1184,14 +1192,10 @@ void draw_artist_ui() {
         display.print("No artists found!");
     } else {
         int list_size = artists.size();
-        for (int i = artist_scroll_offset; i < list_size + 1 && i < artist_scroll_offset + 4; i++) {
+        for (int i = artist_scroll_offset; i < list_size && i < artist_scroll_offset + 4; i++) {
             int y_pos = 12 + (i - artist_scroll_offset) * 10;
             String name;
-            if (i == list_size) {
-                name = "-> Settings";
-            } else {
-                name = artists[i];
-            }
+            name = artists[i];
             int line_index = i - artist_scroll_offset + 1;
             if (i == selected_artist) {
                 display.setCursor(0, y_pos);
@@ -1380,6 +1384,7 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     // A2DP stream reconfigure
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
+    decoder.end();
     decoder.begin();
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback_in_frames(get_data_frames);
@@ -1416,6 +1421,7 @@ void play_wav(String filename, unsigned long seek_position) {
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
     a2dp.set_data_callback_in_frames(get_wav_data_frames);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     Serial.printf("Playing WAV file: %s\n", filename.c_str());
     is_playing = true;
     song_started = true;
@@ -1423,11 +1429,13 @@ void play_wav(String filename, unsigned long seek_position) {
 
 void play_mp3(String filename, unsigned long seek_position) {
     play_file(filename, false, seek_position);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     is_playing = true;
     song_started = true;
 }
 
 void play_song(Song song, unsigned long seek_position) {
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
     if (song.type == MP3) {
         play_mp3(song.path, seek_position);
     } else if (song.type == WAV) {
@@ -1478,46 +1486,46 @@ void handle_player() {
     draw_player_ui();
 }
 
-void draw_settings_ui() {
-    if (!ui_dirty) return;
-    ui_dirty = false;
+// void draw_settings_ui() {
+//     if (!ui_dirty) return;
+//     ui_dirty = false;
 
-    display.clearDisplay();
-    draw_header("Settings");
+//     display.clearDisplay();
+//     draw_header("Settings");
 
-    if (wifi_ap_enabled) {
-        display.drawBitmap(SCREEN_WIDTH - 30, 1, wifi_icon, 8, 8, SSD1306_BLACK);
-        display.setCursor(0, 12);
-        display.println("WiFi AP Enabled");
-        display.setCursor(0, 22);
-        display.print("SSID: ");
-        display.println(wifi_ssid);
-        display.setCursor(0, 32);
-        display.print("Pass: ");
-        display.println(wifi_password);
-        display.setCursor(0, 42);
-        display.print("IP: ");
-        display.println(WiFi.softAPIP().toString());
-        display.setCursor(0, 54);
-        display.print("> Disable AP & Back");
-    } else {
-        display.setCursor(0, 12);
-        if (selected_setting == 0) display.print("> ");
-        display.print("Enable WiFi AP");
+//     if (wifi_ap_enabled) {
+//         display.drawBitmap(SCREEN_WIDTH - 30, 1, wifi_icon, 8, 8, SSD1306_BLACK);
+//         display.setCursor(0, 12);
+//         display.println("WiFi AP Enabled");
+//         display.setCursor(0, 22);
+//         display.print("SSID: ");
+//         display.println(wifi_ssid);
+//         display.setCursor(0, 32);
+//         display.print("Pass: ");
+//         display.println(wifi_password);
+//         display.setCursor(0, 42);
+//         display.print("IP: ");
+//         display.println(WiFi.softAPIP().toString());
+//         display.setCursor(0, 54);
+//         display.print("> Disable AP & Back");
+//     } else {
+//         display.setCursor(0, 12);
+//         if (selected_setting == 0) display.print("> ");
+//         display.print("Enable WiFi AP");
 
-        display.setCursor(0, 22);
-        if (selected_setting == 1) display.print("> ");
-        display.print("<- back");
-    }
-    display.display();
-}
+//         display.setCursor(0, 22);
+//         if (selected_setting == 1) display.print("> ");
+//         display.print("<- back");
+//     }
+//     display.display();
+// }
 
 
-void handle_settings() {
-    // Web server is managed in the state transition.
-    // We just need to draw the UI.
-    draw_settings_ui();
-}
+// void handle_settings() {
+//     // Web server is managed in the state transition.
+//     // We just need to draw the UI.
+//     draw_settings_ui();
+// }
 
 
 // Helper function to read a 16-bit value from a file
