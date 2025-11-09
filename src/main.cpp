@@ -12,6 +12,7 @@
 #include <vector>
 #include "WifiAP.h"
 #include <WiFi.h>
+#include "esp_a2dp_api.h"
 
 extern String wifi_ssid;
 extern String wifi_password;
@@ -1373,7 +1374,12 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     }
 
     // Reset PCM buffer to prevent overflow from previous playback
+    memset(pcm_buffer, 0, sizeof(pcm_buffer));
     pcm_buffer_len = 0;
+
+    // A2DP stream reconfigure
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
+
     decoder.begin();
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback_in_frames(get_data_frames);
@@ -1405,6 +1411,9 @@ void play_wav(String filename, unsigned long seek_position) {
     diag_sample_rate = header.sample_rate;
     diag_bits_per_sample = header.bit_depth;
     diag_channels = header.num_channels;
+
+    // A2DP stream reconfigure
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
     a2dp.set_data_callback_in_frames(get_wav_data_frames);
     Serial.printf("Playing WAV file: %s\n", filename.c_str());
