@@ -80,6 +80,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 volatile int diag_sample_rate = 0;
 volatile int diag_bits_per_sample = 0;
 volatile int diag_channels = 0;
+int current_volume = 64; // Default volume 0-127
 
 BluetoothA2DPSource a2dp;
 libhelix::MP3DecoderHelix decoder;
@@ -435,12 +436,12 @@ void setup() {
 
 
 void loop() {
-    static unsigned long last_heap_log = 0;
-    if (millis() - last_heap_log > 2000) {
-        Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
-                      ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
-        last_heap_log = millis();
-    }
+    // static unsigned long last_heap_log = 0;
+    // if (millis() - last_heap_log > 2000) {
+    //     Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
+    //                   ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
+    //     last_heap_log = millis();
+    // }
     // --- Button handling ---
     bool current_scroll = !digitalRead(BTN_SCROLL);
 
@@ -825,7 +826,7 @@ void handle_bt_connecting() {
     if (is_bt_connected) {
         Serial.println("Connection established.");
         is_connecting = false;
-        a2dp.set_volume(64); // Set volume to 50%
+        a2dp.set_volume(current_volume);
         if (paused_song_index != -1) {
             currentState = PLAYER;
         } else {
@@ -1035,9 +1036,36 @@ void draw_header(String title) {
     if (is_bt_connected) {
         display.drawBitmap(SCREEN_WIDTH - 20, 1, bt_icon, 8, 8, SSD1306_BLACK);
     }
-    if (is_playing) {
-        display.drawBitmap(SCREEN_WIDTH - 10, 1, play_icon, 8, 8, SSD1306_BLACK);
+    const int padding = 2;
+
+    // Calculate width of volume string
+    int volume_percent = (current_volume * 99) / 127;
+    String volume_str = String(volume_percent) + "%";
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(volume_str, 0, 0, &x1, &y1, &w, &h);
+
+    // Calculate total width of all icons and text to be right-aligned
+    int total_width = 0;
+    if (is_bt_connected) total_width += (8 + padding);
+    if (is_playing) total_width += (8 + padding);
+    total_width += w;
+
+    // Calculate starting position
+    int current_x = SCREEN_WIDTH - total_width;
+
+    if (is_bt_connected) {
+        display.drawBitmap(current_x, 1, bt_icon, 8, 8, SSD1306_BLACK);
+        current_x += (8 + padding);
     }
+
+    if (is_playing) {
+        display.drawBitmap(current_x, 1, play_icon, 8, 8, SSD1306_BLACK);
+        current_x += (8 + padding);
+    }
+
+    display.setCursor(current_x, 2);
+    display.print(volume_str);
 
     display.setTextColor(SSD1306_WHITE); // Reset text color for the rest of the UI
 }
@@ -1380,6 +1408,7 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     // A2DP stream reconfigure
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
+    decoder.end();
     decoder.begin();
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback_in_frames(get_data_frames);
@@ -1416,6 +1445,7 @@ void play_wav(String filename, unsigned long seek_position) {
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
     a2dp.set_data_callback_in_frames(get_wav_data_frames);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     Serial.printf("Playing WAV file: %s\n", filename.c_str());
     is_playing = true;
     song_started = true;
@@ -1423,11 +1453,13 @@ void play_wav(String filename, unsigned long seek_position) {
 
 void play_mp3(String filename, unsigned long seek_position) {
     play_file(filename, false, seek_position);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     is_playing = true;
     song_started = true;
 }
 
 void play_song(Song song, unsigned long seek_position) {
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
     if (song.type == MP3) {
         play_mp3(song.path, seek_position);
     } else if (song.type == WAV) {
