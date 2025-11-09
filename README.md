@@ -17,32 +17,6 @@ This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD c
 - **Winamp-Themed Bitmap and Sound Splash Screen:** Displays a custom `splash.bmp` image from the SPIFFS filesystem on startup and plays a `sample.mp3` also from the SPIFFS filesystem /data folder.
 - **PlatformIO Build System:** The project is built using PlatformIO, which automatically manages all dependencies.
 
-## WiFi File Manager
-
-The device includes a WiFi Access Point mode that serves a web-based file manager, allowing you to manage the music files on your SD card wirelessly.
-
-### Enabling the WiFi AP
-
-1.  From the **Bluetooth Discovery** or **Artist Selection** screens, long-press the 'BOOT' button on the "-> Settings" option.
-2.  On the **Settings** screen, select "Enable WiFi AP" with a short press and confirm with a long press.
-3.  The device will start a WiFi network with the credentials specified in the `data/wifi_credentials.txt` file. The default credentials are:
-    *   **SSID:** `winampesp`
-    *   **Password:** `1234567890`
-4.  Connect to this network and navigate to `http://192.168.4.1` in your web browser.
-
-### Features
-
-The web file manager provides the following features:
-- **SD Card Storage Info:** Displays the total and used space on the SD card.
-- **Directory Navigation:** Browse through the folders on your SD card.
-- **Create Folders:** Create new folders in the current directory.
-- **Upload Files:** Upload multiple music files at once to the current directory.
-- **Delete Files/Folders:** Remove files and folders from the SD card.
-
-### Exiting WiFi AP Mode
-
-To disable the WiFi AP and return to Bluetooth mode, select the "Disable AP & Back" option on the device's settings screen. The device will reboot and start in Bluetooth discovery mode.
-
 ## Hardware Requirements
 
 | Component           | Connection                  |
@@ -132,17 +106,12 @@ If you are flashing for the first time or have changed the partition table, you 
 ```
 You will be prompted to power-cycle the device during the erase process. Follow the on-screen instructions.
 
-
-
 ### TODO
 
 1. 3D printed case
 2. Add a batery 
 3. Add moar buttons for better UI/control
-4. Wifi AP for lazy management of mp3 files in the SDcard
-5. Add a minijack for wired headphones/speakers with a MAX98357A (not sure we have enough power for this tho)
-
-
+4. Add a minijack for wired headphones/speakers with a MAX98357A (not sure we have enough power for this tho)
 
 ### Disclaimer 
 
