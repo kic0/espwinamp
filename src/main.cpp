@@ -436,12 +436,12 @@ void setup() {
 
 
 void loop() {
-    static unsigned long last_heap_log = 0;
-    if (millis() - last_heap_log > 2000) {
-        Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
-                      ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
-        last_heap_log = millis();
-    }
+    // static unsigned long last_heap_log = 0;
+    // if (millis() - last_heap_log > 2000) {
+    //     Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
+    //                   ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
+    //     last_heap_log = millis();
+    // }
     // --- Button handling ---
     bool current_scroll = !digitalRead(BTN_SCROLL);
 
@@ -1403,6 +1403,7 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     pcm_buffer_len = 0;
 
     // A2DP stream reconfigure
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
     decoder.end();
