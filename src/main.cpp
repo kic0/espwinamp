@@ -1405,6 +1405,7 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     // A2DP stream reconfigure
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
+    decoder.end();
     decoder.begin();
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback_in_frames(get_data_frames);
