@@ -1403,7 +1403,6 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     pcm_buffer_len = 0;
 
     // A2DP stream reconfigure
-    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
     decoder.end();
@@ -1443,6 +1442,7 @@ void play_wav(String filename, unsigned long seek_position) {
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
     a2dp.set_data_callback_in_frames(get_wav_data_frames);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     Serial.printf("Playing WAV file: %s\n", filename.c_str());
     is_playing = true;
     song_started = true;
@@ -1450,11 +1450,13 @@ void play_wav(String filename, unsigned long seek_position) {
 
 void play_mp3(String filename, unsigned long seek_position) {
     play_file(filename, false, seek_position);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     is_playing = true;
     song_started = true;
 }
 
 void play_song(Song song, unsigned long seek_position) {
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
     if (song.type == MP3) {
         play_mp3(song.path, seek_position);
     } else if (song.type == WAV) {
