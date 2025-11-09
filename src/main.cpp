@@ -422,12 +422,14 @@ void setup() {
 
 
 void loop() {
-    // static unsigned long last_heap_log = 0;
-    // if (millis() - last_heap_log > 2000) {
-    //     Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
-    //                   ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
-    //     last_heap_log = millis();
-    // }
+     // --- Logs ---
+     static unsigned long last_heap_log = 0;
+     if (millis() - last_heap_log > 2000) {
+         Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
+                       ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
+         last_heap_log = millis();
+     }
+
     // --- Button handling ---
     bool current_scroll = !digitalRead(BTN_SCROLL);
 
@@ -1446,48 +1448,6 @@ void handle_player() {
 
     draw_player_ui();
 }
-
-// void draw_settings_ui() {
-//     if (!ui_dirty) return;
-//     ui_dirty = false;
-
-//     display.clearDisplay();
-//     draw_header("Settings");
-
-//     if (wifi_ap_enabled) {
-//         display.drawBitmap(SCREEN_WIDTH - 30, 1, wifi_icon, 8, 8, SSD1306_BLACK);
-//         display.setCursor(0, 12);
-//         display.println("WiFi AP Enabled");
-//         display.setCursor(0, 22);
-//         display.print("SSID: ");
-//         display.println(wifi_ssid);
-//         display.setCursor(0, 32);
-//         display.print("Pass: ");
-//         display.println(wifi_password);
-//         display.setCursor(0, 42);
-//         display.print("IP: ");
-//         display.println(WiFi.softAPIP().toString());
-//         display.setCursor(0, 54);
-//         display.print("> Disable AP & Back");
-//     } else {
-//         display.setCursor(0, 12);
-//         if (selected_setting == 0) display.print("> ");
-//         display.print("Enable WiFi AP");
-
-//         display.setCursor(0, 22);
-//         if (selected_setting == 1) display.print("> ");
-//         display.print("<- back");
-//     }
-//     display.display();
-// }
-
-
-// void handle_settings() {
-//     // Web server is managed in the state transition.
-//     // We just need to draw the UI.
-//     draw_settings_ui();
-// }
-
 
 // Helper function to read a 16-bit value from a file
 uint16_t read16(File &f) {
