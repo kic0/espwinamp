@@ -1398,7 +1398,6 @@ void play_mp3(String filename, unsigned long seek_position) {
 }
 
 void play_song(Song song, unsigned long seek_position) {
-    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_STOP);
     if (song.type == MP3) {
         play_mp3(song.path, seek_position);
     } else if (song.type == WAV) {
