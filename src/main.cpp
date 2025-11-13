@@ -431,7 +431,7 @@ void loop() {
     // --- Volume control ---
     int pot_value = analogRead(POT_PIN);
     int new_volume = map(pot_value, 0, 4095, 0, 127);
-    if (abs(new_volume - current_volume) > 1) { // Dead zone to prevent noise
+    if (abs(new_volume - current_volume) > 3) { // Dead zone to prevent noise
         current_volume = new_volume;
         a2dp.set_volume(current_volume);
         ui_dirty = true;
