@@ -288,16 +288,20 @@ void draw_dynamic_text(String text, int y, int x_offset, bool allow_scroll, int 
 }
 
 void handle_button_press(bool is_short_press, bool is_scroll_button);
-void handle_startup();
-void handle_bt_discovery();
-void handle_bt_connecting();
-void handle_bt_reconnecting();
-void handle_sample_playback();
-void handle_artist_selection();
+void update_startup();
+void update_bt_discovery();
+void draw_bt_discovery_ui();
+void update_bt_connecting();
+void draw_bt_connecting_ui();
+void update_bt_reconnecting();
+void draw_bt_reconnecting_ui();
+void update_sample_playback();
+void draw_sample_playback_ui();
+void update_artist_selection();
 void draw_artist_ui();
-void handle_playlist_selection();
+void update_playlist_selection();
 void draw_playlist_ui();
-void handle_player();
+void update_player();
 void draw_player_ui();
 void draw_header(String title);
 void play_file(String filename, bool from_spiffs, unsigned long seek_position = 0);
@@ -431,7 +435,7 @@ void loop() {
     // --- Volume control ---
     int pot_value = analogRead(POT_PIN);
     int new_volume = map(pot_value, 0, 4095, 0, 127);
-    if (abs(new_volume - current_volume) > 3) { // Dead zone to prevent noise
+    if (abs(new_volume - current_volume) > 1) { // Dead zone to prevent noise
         current_volume = new_volume;
         a2dp.set_volume(current_volume);
         ui_dirty = true;
@@ -483,35 +487,62 @@ void loop() {
         display.ssd1306_command(SSD1306_DISPLAYOFF);
     }
 
-    if (!is_display_on) {
-        return;
-    }
-
+    // --- Update state ---
     switch (currentState) {
         case STARTUP:
-            handle_startup();
+            update_startup();
             break;
         case BT_DISCOVERY:
-            handle_bt_discovery();
+            update_bt_discovery();
             break;
         case BT_CONNECTING:
-            handle_bt_connecting();
+            update_bt_connecting();
             break;
         case BT_RECONNECTING:
-            handle_bt_reconnecting();
+            update_bt_reconnecting();
             break;
         case SAMPLE_PLAYBACK:
-            handle_sample_playback();
+            update_sample_playback();
             break;
         case ARTIST_SELECTION:
-            handle_artist_selection();
+            update_artist_selection();
             break;
         case PLAYLIST_SELECTION:
-            handle_playlist_selection();
+            update_playlist_selection();
             break;
         case PLAYER:
-            handle_player();
+            update_player();
             break;
+    }
+
+    // --- Draw UI ---
+    if (is_display_on) {
+        switch (currentState) {
+            case BT_DISCOVERY:
+                draw_bt_discovery_ui();
+                break;
+            case BT_CONNECTING:
+                draw_bt_connecting_ui();
+                break;
+            case BT_RECONNECTING:
+                draw_bt_reconnecting_ui();
+                break;
+            case SAMPLE_PLAYBACK:
+                draw_sample_playback_ui();
+                break;
+            case ARTIST_SELECTION:
+                draw_artist_ui();
+                break;
+            case PLAYLIST_SELECTION:
+                draw_playlist_ui();
+                break;
+            case PLAYER:
+                draw_player_ui();
+                break;
+            default:
+                // No UI for STARTUP
+                break;
+        }
     }
     delay(120);
 }
@@ -656,7 +687,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
 }
 
 
-void handle_startup() {
+void update_startup() {
     // Always start with BT discovery
     bt_discovery_scroll_offset = 0;
     ui_dirty = true;
@@ -784,7 +815,7 @@ void attempt_auto_connect() {
     Serial.println("Saved device not found in scan results.");
 }
 
-void handle_bt_discovery() {
+void update_bt_discovery() {
     if (is_connecting) {
         return; // Don't start a new scan if we're already trying to connect
     }
@@ -804,14 +835,15 @@ void handle_bt_discovery() {
         is_scanning = true;
         last_scan_time = millis();
     }
-    draw_bt_discovery_ui();
 }
 
-void handle_bt_connecting() {
+void draw_bt_connecting_ui() {
     display.clearDisplay();
     draw_header("Connecting...");
     display.display();
+}
 
+void update_bt_connecting() {
     if (is_bt_connected) {
         Serial.println("Connection established.");
         is_connecting = false;
@@ -829,12 +861,7 @@ void handle_bt_connecting() {
     }
 }
 
-void handle_bt_reconnecting() {
-    static unsigned long reconnect_start_time = 0;
-    if (reconnect_start_time == 0) {
-        reconnect_start_time = millis();
-    }
-
+void draw_bt_reconnecting_ui() {
     if (ui_dirty) {
         display.clearDisplay();
         display.setTextSize(1);
@@ -843,6 +870,13 @@ void handle_bt_reconnecting() {
         display.println("Reconnecting...");
         display.display();
         ui_dirty = false;
+    }
+}
+
+void update_bt_reconnecting() {
+    static unsigned long reconnect_start_time = 0;
+    if (reconnect_start_time == 0) {
+        reconnect_start_time = millis();
     }
 
     if (is_bt_connected) {
@@ -861,7 +895,17 @@ void handle_bt_reconnecting() {
 }
 
 
-void handle_sample_playback() {
+void draw_sample_playback_ui() {
+    if (ui_dirty) {
+        display.clearDisplay();
+        draw_header("Winamp"); // Add a header for consistency
+        draw_bitmap_from_spiffs("/splash.bmp", 10, 12); // Adjust y-pos for header
+        display.display();
+        ui_dirty = false;
+    }
+}
+
+void update_sample_playback() {
     static unsigned long splash_start_time = 0;
     static bool sound_started = false;
 
@@ -870,14 +914,6 @@ void handle_sample_playback() {
         splash_start_time = millis();
         sound_started = false;
         ui_dirty = true; // Force a redraw on first entry
-    }
-
-    if (ui_dirty) {
-        display.clearDisplay();
-        draw_header("Winamp"); // Add a header for consistency
-        draw_bitmap_from_spiffs("/splash.bmp", 10, 12); // Adjust y-pos for header
-        display.display();
-        ui_dirty = false;
     }
 
     // Check for BT disconnection
@@ -1205,7 +1241,7 @@ void draw_artist_ui() {
     display.display();
 }
 
-void handle_artist_selection() {
+void update_artist_selection() {
     if (!is_bt_connected) {
         Serial.println("BT disconnected during artist selection. Entering reconnecting state.");
         currentState = BT_RECONNECTING;
@@ -1215,7 +1251,6 @@ void handle_artist_selection() {
     if (artists.empty()) {
         scan_artists();
     }
-    draw_artist_ui();
 }
 
 
@@ -1257,7 +1292,7 @@ void draw_playlist_ui() {
     display.display();
 }
 
-void handle_playlist_selection() {
+void update_playlist_selection() {
     if (!is_bt_connected) {
         Serial.println("BT disconnected during playlist selection. Entering reconnecting state.");
         currentState = BT_RECONNECTING;
@@ -1267,7 +1302,6 @@ void handle_playlist_selection() {
     if (playlists.empty()) {
         scan_playlists(artists[selected_artist]);
     }
-    draw_playlist_ui();
 }
 
 void draw_player_ui() {
@@ -1438,7 +1472,7 @@ void play_song(Song song, unsigned long seek_position) {
     }
 }
 
-void handle_player() {
+void update_player() {
     if (!is_bt_connected) {
         Serial.println("BT disconnected during playback. Entering reconnecting state.");
         if (audioFile) {
@@ -1477,8 +1511,6 @@ void handle_player() {
         play_song(current_playlist_files[current_song_index], 0);
         ui_dirty = true;
     }
-
-    draw_player_ui();
 }
 
 // Helper function to read a 16-bit value from a file
