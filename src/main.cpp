@@ -6,9 +6,11 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include "pins.h"
+#include "icons.h"
 #include "esp_gap_bt_api.h"
 #include <vector>
+#include "esp_a2dp_api.h"
+#include "pins.h"
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -49,7 +51,7 @@ std::vector<Song> current_playlist_files;
 int current_song_index = 0;
 int selected_song_in_player = 0;
 int player_scroll_offset = 0;
-bool is_playing = true;
+bool is_playing = false;
 bool song_started = false;
 bool sample_started = false;
 bool ui_dirty = true;
@@ -73,6 +75,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 volatile int diag_sample_rate = 0;
 volatile int diag_bits_per_sample = 0;
 volatile int diag_channels = 0;
+int current_volume = 64; // Default volume 0-127
 
 BluetoothA2DPSource a2dp;
 libhelix::MP3DecoderHelix decoder;
@@ -102,6 +105,8 @@ enum AppState {
   PLAYER
 };
 AppState currentState = STARTUP;
+AppState previousState = STARTUP;
+
 
 // forward declaration
 int32_t get_data_frames(Frame *frame, int32_t frame_count);
@@ -289,34 +294,42 @@ void handle_playlist_selection();
 void draw_playlist_ui();
 void handle_player();
 void draw_player_ui();
+void draw_header(String title);
 void play_file(String filename, bool from_spiffs, unsigned long seek_position = 0);
 void play_wav(String filename, unsigned long seek_position = 0);
 void play_mp3(String filename, unsigned long seek_position = 0);
 void play_song(Song song, unsigned long seek_position = 0);
 void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y);
+void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset_ignored) {
+    int display_lines = (currentState == PLAYER) ? 3 : 4;
+    int center_offset = display_lines / 2;
 
-void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_offset, int center_offset) {
+    // Wrap selection
     if (selected_item >= item_count) {
         selected_item = 0;
     } else if (selected_item < 0) {
         selected_item = item_count - 1;
     }
 
-    if (item_count <= 4) {
+    // Don't scroll if all items fit
+    if (item_count <= display_lines) {
         scroll_offset = 0;
         return;
     }
 
+    // Determine if we need to scroll
     if (selected_item < scroll_offset + center_offset) {
         scroll_offset = selected_item - center_offset;
-        if (scroll_offset < 0) {
-            scroll_offset = 0;
-        }
-    } else if (selected_item >= scroll_offset + 4 - center_offset) {
-        scroll_offset = selected_item - (3 - center_offset);
-        if (scroll_offset > item_count - 4) {
-            scroll_offset = item_count - 4;
-        }
+    } else if (selected_item >= scroll_offset + display_lines - center_offset) {
+        scroll_offset = selected_item - (display_lines - 1 - center_offset);
+    }
+
+    // Clamp scroll_offset to bounds
+    if (scroll_offset < 0) {
+        scroll_offset = 0;
+    }
+    if (scroll_offset > item_count - display_lines) {
+        scroll_offset = item_count - display_lines;
     }
 }
 
@@ -373,6 +386,8 @@ void setup() {
     // 2. BT Init
     Serial.println("Starting A2DP source...");
     a2dp.set_on_connection_state_changed(bt_connection_state_cb);
+    a2dp.set_task_core(1);
+    a2dp.set_task_priority(2);
     a2dp.start("winamp");
     Serial.println("A2DP started, device name set to winamp");
 
@@ -407,12 +422,23 @@ void setup() {
 
 
 void loop() {
-    static unsigned long last_heap_log = 0;
-    if (millis() - last_heap_log > 2000) {
-        Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
-                      ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
-        last_heap_log = millis();
+    // --- Volume control ---
+    int pot_value = analogRead(POT_PIN);
+    int new_volume = map(pot_value, 0, 4095, 0, 127);
+    if (abs(new_volume - current_volume) > 1) { // Dead zone to prevent noise
+        current_volume = new_volume;
+        a2dp.set_volume(current_volume);
+        ui_dirty = true;
     }
+
+     // --- Logs ---
+     static unsigned long last_heap_log = 0;
+     if (millis() - last_heap_log > 2000) {
+         Serial.printf("Free heap: %d bytes | Decoder: sample_rate=%d, bps=%d, channels=%d\n",
+                       ESP.getFreeHeap(), diag_sample_rate, diag_bits_per_sample, diag_channels);
+         last_heap_log = millis();
+     }
+
     // --- Button handling ---
     bool current_scroll = !digitalRead(BTN_SCROLL);
 
@@ -471,7 +497,7 @@ void loop() {
             handle_player();
             break;
     }
-    delay(50);
+    delay(120);
 }
 
 
@@ -481,16 +507,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
     if (currentState == BT_DISCOVERY) {
         if (is_scroll_button && is_short_press) { // Scroll with short press
             selected_bt_device++;
-            if (selected_bt_device >= bt_devices.size()) {
-                selected_bt_device = 0;
-            }
-            // Simple viewport scrolling
-            if (selected_bt_device >= bt_discovery_scroll_offset + 4) {
-                bt_discovery_scroll_offset = selected_bt_device - 3;
-            }
-            if (selected_bt_device < bt_discovery_scroll_offset) {
-                bt_discovery_scroll_offset = selected_bt_device;
-            }
+            calculate_scroll_offset(selected_bt_device, bt_devices.size(), bt_discovery_scroll_offset, 2);
             ui_dirty = true;
         } else if (is_scroll_button && !is_short_press) { // Select with long press
             if (!bt_devices.empty()) {
@@ -768,16 +785,13 @@ void handle_bt_discovery() {
 
 void handle_bt_connecting() {
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.println("Connecting...");
+    draw_header("Connecting...");
     display.display();
 
     if (is_bt_connected) {
         Serial.println("Connection established.");
         is_connecting = false;
-        a2dp.set_volume(64); // Set volume to 50%
+        a2dp.set_volume(current_volume);
         if (paused_song_index != -1) {
             currentState = PLAYER;
         } else {
@@ -824,21 +838,22 @@ void handle_bt_reconnecting() {
 
 
 void handle_sample_playback() {
-    // Static variables are used here to maintain state across loop() calls.
-    // They are initialized once when the function is first called and retain their values.
-    // splash_start_time is reset to 0 when this state is exited, ensuring a clean start next time.
     static unsigned long splash_start_time = 0;
     static bool sound_started = false;
 
-    // Initialization step (runs only once)
+    // Initialization step
     if (splash_start_time == 0) {
         splash_start_time = millis();
         sound_started = false;
+        ui_dirty = true; // Force a redraw on first entry
+    }
 
-        // Display splash screen
+    if (ui_dirty) {
         display.clearDisplay();
-        draw_bitmap_from_spiffs("/splash.bmp", 10, 0);
+        draw_header("Winamp"); // Add a header for consistency
+        draw_bitmap_from_spiffs("/splash.bmp", 10, 12); // Adjust y-pos for header
         display.display();
+        ui_dirty = false;
     }
 
     // Check for BT disconnection
@@ -857,11 +872,17 @@ void handle_sample_playback() {
     if (millis() - splash_start_time >= 5000 && !sound_started) {
         play_file("/sample.mp3", true);
         sound_started = true;
+        is_playing = true;
+        song_started = true; // Use song_started to be consistent with main player
     }
 
-    // After 15 seconds, move to the next state
-    if (millis() - splash_start_time >= 15000) {
-        Serial.println("Splash screen finished.");
+    bool song_finished = sound_started && audioFile && !audioFile.available();
+    bool timeout_reached = millis() - splash_start_time >= 20000;
+
+    // Transition when song finishes or timeout is reached
+    if (song_finished || timeout_reached) {
+        if(song_finished) Serial.println("Sample playback finished.");
+        if(timeout_reached) Serial.println("Sample playback timed out.");
 
         // Stop sample playback if it's still going
         if (sound_started && audioFile) {
@@ -875,7 +896,10 @@ void handle_sample_playback() {
         // Reset state for next time
         splash_start_time = 0;
         sound_started = false;
+        is_playing = false;
+        song_started = false;
 
+        // Transition to the next state
         playlist_scroll_offset = 0;
         ui_dirty = true;
         currentState = ARTIST_SELECTION;
@@ -967,31 +991,77 @@ void scan_artists() {
     }
 }
 
+void draw_header(String title) {
+    display.fillRect(0, 0, SCREEN_WIDTH, 10, SSD1306_WHITE);
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_BLACK);
+    display.setCursor(2, 2);
+    display.print(title);
+
+    const int padding = 2;
+    int current_x = SCREEN_WIDTH;
+
+    // Draw Volume (right-most item)
+    int volume_percent = (current_volume * 99) / 127;
+    String volume_str = String(volume_percent) + "%";
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(volume_str, 0, 0, &x1, &y1, &w, &h);
+    current_x -= w;
+    display.setCursor(current_x, 2);
+    display.print(volume_str);
+
+    // Draw Play icon
+    if (is_playing) {
+        current_x -= (padding + 8); // padding + icon width
+        display.drawBitmap(current_x, 1, play_icon, 8, 8, SSD1306_BLACK);
+    }
+
+    // Draw BT icon
+    if (is_bt_connected) {
+        current_x -= (padding + 8); // padding + icon width
+        display.drawBitmap(current_x, 1, bt_icon, 8, 8, SSD1306_BLACK);
+    }
+
+    display.setTextColor(SSD1306_WHITE); // Reset text color for the rest of the UI
+}
+
 void draw_bt_discovery_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0,0);
-    display.print("Select BT Speaker:");
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_header("Select BT Speaker");
 
-    if (bt_devices.empty()) {
-        display.setCursor(0, 26);
-        display.print("Scanning...");
-    } else {
-        for (int i = bt_discovery_scroll_offset; i < bt_devices.size() && i < bt_discovery_scroll_offset + 4; i++) {
-            int y_pos = 26 + (i - bt_discovery_scroll_offset) * 10;
+    int list_size = bt_devices.size();
+    int total_items = list_size;
+
+    // Display list
+    for (int i = 0; i < 4; i++) {
+        int item_index = bt_discovery_scroll_offset + i;
+        if (item_index >= total_items) break;
+
+        int y_pos = 12 + i * 10;
+        String name;
+        name = bt_devices[item_index].name;
+
+        if (item_index == selected_bt_device) {
             display.setCursor(0, y_pos);
-            if (i == selected_bt_device) {
-                display.print("> ");
-            } else {
-                display.print("  ");
-            }
-            display.print(bt_devices[i].name.c_str());
+            display.print("> ");
+            draw_dynamic_text(name, y_pos, 12, true, i + 1);
+        } else {
+            draw_dynamic_text(name, y_pos, 12, false, i + 1);
         }
     }
+
+    if (list_size == 0) {
+        display.setCursor(0, 26);
+        if (is_scanning) {
+            display.print("Scanning...");
+        } else {
+            display.print("No devices found.");
+        }
+    }
+
     display.display();
 }
 
@@ -1087,19 +1157,17 @@ void draw_artist_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-
-    draw_dynamic_text("Select Artist:", 0, 0, false, 0);
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_header("Select Artist");
 
     if (artists.empty()) {
         display.setCursor(0, 26);
         display.print("No artists found!");
     } else {
-        for (int i = artist_scroll_offset; i < artists.size() && i < artist_scroll_offset + 4; i++) {
-            int y_pos = 26 + (i - artist_scroll_offset) * 10;
-            String name = artists[i];
+        int list_size = artists.size();
+        for (int i = artist_scroll_offset; i < list_size && i < artist_scroll_offset + 4; i++) {
+            int y_pos = 12 + (i - artist_scroll_offset) * 10;
+            String name;
+            name = artists[i];
             int line_index = i - artist_scroll_offset + 1;
             if (i == selected_artist) {
                 display.setCursor(0, y_pos);
@@ -1131,11 +1199,7 @@ void draw_playlist_ui() {
     if (!ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-
-    draw_dynamic_text("Select Playlist:", 0, 0, false, 0);
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_header("Select Playlist");
 
     if (playlists.empty()) {
         display.setCursor(0, 26);
@@ -1187,15 +1251,14 @@ void draw_player_ui() {
     ui_dirty = false;
 
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
+    draw_header("Now Playing");
 
     // Header
     String artist_name = artists[selected_artist];
     String album_name = playlists[selected_playlist];
     String header_text = artist_name + " - " + album_name;
-    draw_dynamic_text(header_text, 0, 0, true, 0);
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    draw_dynamic_text(header_text, 12, 0, true, 0);
+    display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
 
     // Currently Playing Song
     if (!current_playlist_files.empty()) {
@@ -1206,15 +1269,15 @@ void draw_player_ui() {
         }
         playing_song.replace(".mp3", "");
         playing_song.replace(".wav", "");
-        draw_dynamic_text(">> " + playing_song, 12, 0, true, 1);
+        draw_dynamic_text(">> " + playing_song, 24, 0, true, 1);
     }
-    display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
+    display.drawLine(0, 34, 127, 34, SSD1306_WHITE);
 
     // Playlist
     if (!current_playlist_files.empty()) {
         int list_size = current_playlist_files.size();
-        for (int i = player_scroll_offset; i < list_size + 1 && i < player_scroll_offset + 4; i++) {
-            int y_pos = 26 + (i - player_scroll_offset) * 10;
+        for (int i = player_scroll_offset; i < list_size + 1 && i < player_scroll_offset + 3; i++) {
+            int y_pos = 38 + (i - player_scroll_offset) * 10;
             int line_index = i - player_scroll_offset + 2;
 
             if (i == list_size) { // After the last song, show "back"
@@ -1287,7 +1350,13 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     }
 
     // Reset PCM buffer to prevent overflow from previous playback
+    memset(pcm_buffer, 0, sizeof(pcm_buffer));
     pcm_buffer_len = 0;
+
+    // A2DP stream reconfigure
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
+
+    decoder.end();
     decoder.begin();
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback_in_frames(get_data_frames);
@@ -1320,7 +1389,11 @@ void play_wav(String filename, unsigned long seek_position) {
     diag_bits_per_sample = header.bit_depth;
     diag_channels = header.num_channels;
 
+    // A2DP stream reconfigure
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
+
     a2dp.set_data_callback_in_frames(get_wav_data_frames);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     Serial.printf("Playing WAV file: %s\n", filename.c_str());
     is_playing = true;
     song_started = true;
@@ -1328,6 +1401,7 @@ void play_wav(String filename, unsigned long seek_position) {
 
 void play_mp3(String filename, unsigned long seek_position) {
     play_file(filename, false, seek_position);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     is_playing = true;
     song_started = true;
 }
@@ -1479,7 +1553,6 @@ void draw_bitmap_from_spiffs(const char *filename, int16_t x, int16_t y) {
   }
   bmpFile.close();
 }
-
 
 void bt_connection_state_cb(esp_a2d_connection_state_t state, void* ptr){
     Serial.printf("A2DP connection state changed: %d\n", state);

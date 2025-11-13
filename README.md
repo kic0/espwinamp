@@ -6,6 +6,7 @@ This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD c
 
 - **Bluetooth A2DP Source:** Streams audio to any A2DP-compatible speaker or headphones.
 - **SD Card Support:** Music is organized in an `Artist -> Album` folder structure on the SD card.
+- **Unified UI with Status Icons:** The user interface features a consistent header across all screens with status icons for Bluetooth connection, audio playback, and WiFi AP mode.
 - **OLED Display Interface:** A 128x64 SSD1306 OLED screen displays a Winamp-themed user interface.
 - **Single-Button Control:** All user input is handled by the single 'BOOT' button (GPIO 0), which supports short and long presses.
 - **State Machine Logic:** The application is built around a robust state machine that handles Bluetooth discovery, connection, and multiple playback states.
@@ -18,12 +19,13 @@ This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD c
 
 ## Hardware Requirements
 
-| Component           | Connection                  |
-| ------------------- | --------------------------- |
-| **ESP32 DEVKIT**    | -                           |
-| **OLED Display**    | SDA: GPIO 16, SCL: GPIO 17  |
-| **SD Card Reader**  | CS: GPIO 5, SCK: GPIO 18, MOSI: GPIO 23, MISO: GPIO 19 |
-| **'BOOT' Button**   | GPIO 0 (built-in)           |
+| Component                  | Connection                                             |
+| -------------------------- | ------------------------------------------------------ |
+| **ESP32 DEVKIT**           | Wroom 30 Pin (any should do updates pins accordingly)  |
+| **OLED Display**           | SDA: GPIO 16, SCL: GPIO 17                             |
+| **SD Card Reader**         | CS: GPIO 5, SCK: GPIO 18, MOSI: GPIO 23, MISO: GPIO 19 |
+| **'BOOT' Button**          | GPIO 0 (built-in)                                      |
+| **Potentiometer (Volume)** | Data: GPIO 35                                          |
 
 ## Software Dependencies
 
@@ -105,17 +107,12 @@ If you are flashing for the first time or have changed the partition table, you 
 ```
 You will be prompted to power-cycle the device during the erase process. Follow the on-screen instructions.
 
-
-
 ### TODO
 
 1. 3D printed case
 2. Add a batery 
 3. Add moar buttons for better UI/control
-4. Wifi AP for lazy management of mp3 files in the SDcard
-5. Add a minijack for wired headphones/speakers with a MAX98357A (not sure we have enough power for this tho)
-
-
+4. Add a minijack for wired headphones/speakers with a MAX98357A (not sure we have enough power for this tho)
 
 ### Disclaimer 
 
