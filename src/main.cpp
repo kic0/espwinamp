@@ -68,6 +68,11 @@ String marquee_text[MAX_MARQUEE_LINES];
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 
+// ---------- Power Management ----------
+const unsigned long SCREEN_OFF_TIMEOUT = 60000; // 1 minute
+unsigned long last_activity_time = 0;
+bool is_display_on = true;
+
 // ---------- Display ----------
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -418,6 +423,7 @@ void setup() {
     display.println("Winamp");
     display.display();
     delay(2000); // Display splash
+    last_activity_time = millis();
 }
 
 
@@ -429,6 +435,11 @@ void loop() {
         current_volume = new_volume;
         a2dp.set_volume(current_volume);
         ui_dirty = true;
+        last_activity_time = millis();
+        if (!is_display_on) {
+            is_display_on = true;
+            display.ssd1306_command(SSD1306_DISPLAYON);
+        }
     }
 
      // --- Logs ---
@@ -471,6 +482,16 @@ void loop() {
         ui_dirty = true;
     }
 
+    // --- Power Management ---
+    if (is_display_on && (millis() - last_activity_time > SCREEN_OFF_TIMEOUT)) {
+        is_display_on = false;
+        display.ssd1306_command(SSD1306_DISPLAYOFF);
+    }
+
+    if (!is_display_on) {
+        return;
+    }
+
     switch (currentState) {
         case STARTUP:
             handle_startup();
@@ -503,6 +524,14 @@ void loop() {
 
 void handle_button_press(bool is_short_press, bool is_scroll_button) {
     Serial.printf("Button press: short=%d, scroll=%d, state=%d\n", is_short_press, is_scroll_button, currentState);
+
+    last_activity_time = millis();
+    if (!is_display_on) {
+        is_display_on = true;
+        display.ssd1306_command(SSD1306_DISPLAYON);
+        // Don't process the button press, just wake the screen
+        return;
+    }
 
     if (currentState == BT_DISCOVERY) {
         if (is_scroll_button && is_short_press) { // Scroll with short press
