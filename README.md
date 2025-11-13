@@ -6,13 +6,13 @@ This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD c
 
 - **Bluetooth A2DP Source:** Streams audio to any A2DP-compatible speaker or headphones.
 - **SD Card Support:** Music is organized in an `Artist -> Album` folder structure on the SD card.
-- **Unified UI with Status Icons:** The user interface features a consistent header across all screens with status icons for Bluetooth connection, audio playback, and WiFi AP mode.
+- **Unified UI with Status Icons:** The user interface features a consistent header across all screens with status icons for Bluetooth connection, audio playback, and sound level.
 - **OLED Display Interface:** A 128x64 SSD1306 OLED screen displays a Winamp-themed user interface.
 - **Single-Button Control:** All user input is handled by the single 'BOOT' button (GPIO 0), which supports short and long presses.
 - **State Machine Logic:** The application is built around a robust state machine that handles Bluetooth discovery, connection, and multiple playback states.
 - **Supports MP3 and WAV files:** Streams MP3 and WAV audio.
-- **Interactive "Now Playing" Screen:** While a song is playing, you can scroll through the current playlist and select a new song to play.
-- **Auto-Connect:** The device saves the MAC address of the last connected speaker and will attempt to auto-reconnect on the next boot.
+- **Interactive "Now Playing" Screen:** While a song is playing, you can scroll through other playlists/artists and select a new song to play.
+- **Auto-Connect:** The device saves the MAC address of the last connected speaker and will attempt to auto-reconnect on the next boot or if connection drops-
 - **Robust Reconnection Logic:** When the Bluetooth connection is lost, the device displays a "Reconnecting..." message and attempts to reconnect for 15 seconds before falling back to the device discovery screen.
 - **Winamp-Themed Bitmap and Sound Splash Screen:** Displays a custom `splash.bmp` image from the SPIFFS filesystem on startup and plays a `sample.mp3` also from the SPIFFS filesystem /data folder.
 - **PlatformIO Build System:** The project is built using PlatformIO, which automatically manages all dependencies.
