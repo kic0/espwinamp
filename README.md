@@ -19,13 +19,13 @@ This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD c
 
 ## Hardware Requirements
 
-| Component           | Connection                  |
-| ------------------- | --------------------------- |
-| **ESP32 DEVKIT**    | -                           |
-| **OLED Display**    | SDA: GPIO 16, SCL: GPIO 17  |
-| **SD Card Reader**  | CS: GPIO 5, SCK: GPIO 18, MOSI: GPIO 23, MISO: GPIO 19 |
-| **'BOOT' Button**   | GPIO 0 (built-in)           |
-| **Potentiometer (Volume)** | Data: GPIO 35 |
+| Component                  | Connection                                             |
+| -------------------------- | ------------------------------------------------------ |
+| **ESP32 DEVKIT**           | Wroom 30 Pin (any should do updates pins accordingly)  |
+| **OLED Display**           | SDA: GPIO 16, SCL: GPIO 17                             |
+| **SD Card Reader**         | CS: GPIO 5, SCK: GPIO 18, MOSI: GPIO 23, MISO: GPIO 19 |
+| **'BOOT' Button**          | GPIO 0 (built-in)                                      |
+| **Potentiometer (Volume)** | Data: GPIO 35                                          |
 
 ## Software Dependencies
 
