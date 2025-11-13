@@ -10,3 +10,5 @@
 #define SD_MISO 19
 
 #define BTN_SCROLL 0
+
+#define POT_PIN 35

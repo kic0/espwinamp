@@ -6,11 +6,11 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include "pins.h"
 #include "icons.h"
 #include "esp_gap_bt_api.h"
 #include <vector>
 #include "esp_a2dp_api.h"
+#include "pins.h"
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -422,6 +422,15 @@ void setup() {
 
 
 void loop() {
+    // --- Volume control ---
+    int pot_value = analogRead(POT_PIN);
+    int new_volume = map(pot_value, 0, 4095, 0, 127);
+    if (abs(new_volume - current_volume) > 1) { // Dead zone to prevent noise
+        current_volume = new_volume;
+        a2dp.set_volume(current_volume);
+        ui_dirty = true;
+    }
+
      // --- Logs ---
      static unsigned long last_heap_log = 0;
      if (millis() - last_heap_log > 2000) {
