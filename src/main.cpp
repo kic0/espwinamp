@@ -435,11 +435,6 @@ void loop() {
         current_volume = new_volume;
         a2dp.set_volume(current_volume);
         ui_dirty = true;
-        last_activity_time = millis();
-        if (!is_display_on) {
-            is_display_on = true;
-            display.ssd1306_command(SSD1306_DISPLAYON);
-        }
     }
 
      // --- Logs ---
