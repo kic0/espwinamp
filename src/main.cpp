@@ -1049,6 +1049,7 @@ void scan_artists() {
     } else {
         Serial.println("Failed to create artist cache file.");
     }
+    ui_dirty = true;
 }
 
 void draw_header(String title) {
@@ -1211,6 +1212,7 @@ void scan_playlists(String artist_name) {
     } else {
         Serial.println("Failed to create album cache file.");
     }
+    ui_dirty = true;
 }
 
 void draw_artist_ui() {
