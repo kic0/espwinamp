@@ -69,7 +69,7 @@ String marquee_text[MAX_MARQUEE_LINES];
 #define SCREEN_HEIGHT 64
 
 // ---------- Power Management ----------
-const unsigned long SCREEN_OFF_TIMEOUT = 60000; // 1 minute
+const unsigned long SCREEN_OFF_TIMEOUT = 120000; // 2 minutes
 unsigned long last_activity_time = 0;
 bool is_display_on = true;
 
@@ -435,7 +435,7 @@ void loop() {
     // --- Volume control ---
     int pot_value = analogRead(POT_PIN);
     int new_volume = map(pot_value, 0, 4095, 0, 127);
-    if (abs(new_volume - current_volume) > 1) { // Dead zone to prevent noise
+    if (abs(new_volume - current_volume) > 2) { // Dead zone to prevent noise
         current_volume = new_volume;
         a2dp.set_volume(current_volume);
         ui_dirty = true;
@@ -930,8 +930,8 @@ void update_sample_playback() {
         return;
     }
 
-    // After 2 seconds, start playing the sound (if not already started)
-    if (millis() - splash_start_time >= 2000 && !sound_started) {
+    // After 3 seconds, start playing the sound (if not already started)
+    if (millis() - splash_start_time >= 3000 && !sound_started) {
         play_file("/sample.mp3", true);
         sound_started = true;
         is_playing = true;
