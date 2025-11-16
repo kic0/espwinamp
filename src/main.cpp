@@ -531,7 +531,9 @@ void loop() {
                 draw_sample_playback_ui();
                 break;
             case ARTIST_SELECTION:
-                draw_artist_ui();
+                if (!artists.empty()) {
+                    draw_artist_ui();
+                }
                 break;
             case PLAYLIST_SELECTION:
                 draw_playlist_ui();
