@@ -882,6 +882,7 @@ void update_sample_playback() {
         Serial.println("BT disconnected during sample playback. Returning to discovery.");
         if (audioFile) audioFile.close();
         a2dp.disconnect();
+        bt_devices.clear();
         // Reset state for next time
         splash_start_time = 0;
         sound_started = false;
@@ -1209,6 +1210,7 @@ void update_artist_selection() {
     if (!is_bt_connected) {
         Serial.println("BT disconnected during artist selection. Returning to discovery.");
         a2dp.disconnect();
+        bt_devices.clear();
         currentState = BT_DISCOVERY;
         ui_dirty = true;
         return;
@@ -1261,6 +1263,7 @@ void update_playlist_selection() {
     if (!is_bt_connected) {
         Serial.println("BT disconnected during playlist selection. Returning to discovery.");
         a2dp.disconnect();
+        bt_devices.clear();
         currentState = BT_DISCOVERY;
         ui_dirty = true;
         return;
@@ -1448,6 +1451,7 @@ void update_player() {
             Serial.printf("Pausing song %d at position %lu\n", paused_song_index, paused_song_position);
         }
         a2dp.disconnect();
+        bt_devices.clear();
         decoder.end();
         song_started = false;
         is_playing = false;
