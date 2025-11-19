@@ -839,9 +839,9 @@ void draw_bt_connecting_ui() {
 void update_bt_connecting() {
     if (is_bt_connected) {
         Serial.println("Connection established.");
-        delay(500); // Delay to allow hardware to stabilize
         is_connecting = false;
         a2dp.set_volume(current_volume);
+        delay(1000); // Delay to allow hardware to stabilize before transitioning state
         if (paused_song_index != -1) {
             currentState = PLAYER;
         } else {
@@ -1065,7 +1065,7 @@ void draw_bt_discovery_ui() {
         int item_index = bt_discovery_scroll_offset + i;
         if (item_index >= total_items) break;
 
-        int y_pos = 12 + i * 10;
+        int y_pos = 20 + i * 10;
         String name;
         name = bt_devices[item_index].name;
 
