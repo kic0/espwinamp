@@ -839,6 +839,7 @@ void draw_bt_connecting_ui() {
 void update_bt_connecting() {
     if (is_bt_connected) {
         Serial.println("Connection established.");
+        delay(500); // Delay to allow hardware to stabilize
         is_connecting = false;
         a2dp.set_volume(current_volume);
         if (paused_song_index != -1) {
