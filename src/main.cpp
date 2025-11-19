@@ -840,8 +840,8 @@ void update_bt_connecting() {
     if (is_bt_connected) {
         Serial.println("Connection established.");
         is_connecting = false;
+        delay(1000); // Delay to allow hardware to stabilize
         a2dp.set_volume(current_volume);
-        delay(1000); // Delay to allow hardware to stabilize before transitioning state
         if (paused_song_index != -1) {
             currentState = PLAYER;
         } else {
