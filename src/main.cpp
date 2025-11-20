@@ -103,7 +103,6 @@ enum AppState {
   STARTUP,
   BT_DISCOVERY,
   BT_CONNECTING,
-  BT_RECONNECTING,
   SAMPLE_PLAYBACK,
   ARTIST_SELECTION,
   PLAYLIST_SELECTION,
@@ -293,8 +292,6 @@ void update_bt_discovery();
 void draw_bt_discovery_ui();
 void update_bt_connecting();
 void draw_bt_connecting_ui();
-void update_bt_reconnecting();
-void draw_bt_reconnecting_ui();
 void update_sample_playback();
 void draw_sample_playback_ui();
 void update_artist_selection();
@@ -498,9 +495,6 @@ void loop() {
         case BT_CONNECTING:
             update_bt_connecting();
             break;
-        case BT_RECONNECTING:
-            update_bt_reconnecting();
-            break;
         case SAMPLE_PLAYBACK:
             update_sample_playback();
             break;
@@ -523,9 +517,6 @@ void loop() {
                 break;
             case BT_CONNECTING:
                 draw_bt_connecting_ui();
-                break;
-            case BT_RECONNECTING:
-                draw_bt_reconnecting_ui();
                 break;
             case SAMPLE_PLAYBACK:
                 draw_sample_playback_ui();
@@ -857,42 +848,10 @@ void update_bt_connecting() {
         }
     } else if (millis() - connection_start_time > 15000) { // 15 second timeout
         Serial.println("Connection timeout. Returning to discovery.");
+        a2dp.disconnect();
         is_bt_connected = false;
         is_connecting = false;
         currentState = BT_DISCOVERY;
-    }
-}
-
-void draw_bt_reconnecting_ui() {
-    if (ui_dirty) {
-        display.clearDisplay();
-        display.setTextSize(1);
-        display.setTextColor(SSD1306_WHITE);
-        display.setCursor(0, 0);
-        display.println("Reconnecting...");
-        display.display();
-        ui_dirty = false;
-    }
-}
-
-void update_bt_reconnecting() {
-    static unsigned long reconnect_start_time = 0;
-    if (reconnect_start_time == 0) {
-        reconnect_start_time = millis();
-    }
-
-    if (is_bt_connected) {
-        Serial.println("Reconnection successful.");
-        reconnect_start_time = 0; // Reset for next time
-        currentState = PLAYER;
-        ui_dirty = true;
-    } else if (millis() - reconnect_start_time > 15000) { // 15 second timeout
-        Serial.println("Reconnection timeout. Returning to discovery.");
-        reconnect_start_time = 0; // Reset for next time
-        is_connecting = false;
-        a2dp.disconnect(); // try to kill any pending connection
-        currentState = BT_DISCOVERY;
-        ui_dirty = true;
     }
 }
 
@@ -920,12 +879,14 @@ void update_sample_playback() {
 
     // Check for BT disconnection
     if (!is_bt_connected) {
-        Serial.println("BT disconnected during sample playback. Entering reconnecting state.");
+        Serial.println("BT disconnected during sample playback. Returning to discovery.");
         if (audioFile) audioFile.close();
+        a2dp.disconnect();
+        bt_devices.clear();
         // Reset state for next time
         splash_start_time = 0;
         sound_started = false;
-        currentState = BT_RECONNECTING;
+        currentState = BT_DISCOVERY;
         ui_dirty = true;
         return;
     }
@@ -1103,7 +1064,7 @@ void draw_bt_discovery_ui() {
         int item_index = bt_discovery_scroll_offset + i;
         if (item_index >= total_items) break;
 
-        int y_pos = 12 + i * 10;
+        int y_pos = 20 + i * 10;
         String name;
         name = bt_devices[item_index].name;
 
@@ -1247,8 +1208,10 @@ void draw_artist_ui() {
 
 void update_artist_selection() {
     if (!is_bt_connected) {
-        Serial.println("BT disconnected during artist selection. Entering reconnecting state.");
-        currentState = BT_RECONNECTING;
+        Serial.println("BT disconnected during artist selection. Returning to discovery.");
+        a2dp.disconnect();
+        bt_devices.clear();
+        currentState = BT_DISCOVERY;
         ui_dirty = true;
         return;
     }
@@ -1298,8 +1261,10 @@ void draw_playlist_ui() {
 
 void update_playlist_selection() {
     if (!is_bt_connected) {
-        Serial.println("BT disconnected during playlist selection. Entering reconnecting state.");
-        currentState = BT_RECONNECTING;
+        Serial.println("BT disconnected during playlist selection. Returning to discovery.");
+        a2dp.disconnect();
+        bt_devices.clear();
+        currentState = BT_DISCOVERY;
         ui_dirty = true;
         return;
     }
@@ -1478,17 +1443,19 @@ void play_song(Song song, unsigned long seek_position) {
 
 void update_player() {
     if (!is_bt_connected) {
-        Serial.println("BT disconnected during playback. Entering reconnecting state.");
+        Serial.println("BT disconnected during playback. Returning to discovery.");
         if (audioFile) {
             paused_song_index = current_song_index;
             paused_song_position = audioFile.position();
             audioFile.close();
             Serial.printf("Pausing song %d at position %lu\n", paused_song_index, paused_song_position);
         }
+        a2dp.disconnect();
+        bt_devices.clear();
         decoder.end();
         song_started = false;
         is_playing = false;
-        currentState = BT_RECONNECTING;
+        currentState = BT_DISCOVERY;
         ui_dirty = true;
         return;
     }
