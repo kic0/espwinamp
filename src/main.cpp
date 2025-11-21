@@ -86,7 +86,7 @@ BluetoothA2DPSource a2dp;
 libhelix::MP3DecoderHelix decoder;
 File audioFile;
 uint8_t read_buffer[1024];
-int16_t pcm_buffer[4096];
+int16_t pcm_buffer[8192];
 int32_t pcm_buffer_len = 0;
 
 // Button states
@@ -236,7 +236,7 @@ void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, voi
     diag_channels = info.nChans;
 
     // Append new PCM data to the buffer
-    if (pcm_buffer_len + len < sizeof(pcm_buffer) / sizeof(int16_t)) {
+    if (pcm_buffer_len + len <= sizeof(pcm_buffer) / sizeof(int16_t)) {
         memcpy(pcm_buffer + pcm_buffer_len, pcm_buffer_cb, len * sizeof(int16_t));
         pcm_buffer_len += len;
     } else {
@@ -1387,6 +1387,22 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     decoder.begin();
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback_in_frames(get_data_frames);
+
+    // Pre-buffer: Decode enough frames to fill the PCM buffer
+    // This ensures valid audio data is ready before A2DP starts, preventing "chipmunk" speed-up effect.
+    Serial.println("Pre-buffering...");
+    unsigned long start_prebuf = millis();
+    // Leave room for at least one max-size frame (2304 samples) to prevent overflow in callback
+    while (pcm_buffer_len < (sizeof(pcm_buffer) / sizeof(int16_t)) - 4608 && audioFile.available() && millis() - start_prebuf < 2000) {
+        int bytes_read = audioFile.read(read_buffer, sizeof(read_buffer));
+        if (bytes_read > 0) {
+            decoder.write(read_buffer, bytes_read);
+        } else {
+            break;
+        }
+    }
+    Serial.printf("Pre-buffered %d samples in %lu ms\n", pcm_buffer_len, millis() - start_prebuf);
+
     Serial.printf("Playing %s from %s\n", filename.c_str(), from_spiffs ? "SPIFFS" : "SD");
 }
 
@@ -1420,6 +1436,10 @@ void play_wav(String filename, unsigned long seek_position) {
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
     a2dp.set_data_callback_in_frames(get_wav_data_frames);
+
+    // Small delay to let the buffer settle and the receiver prepare
+    delay(400);
+
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     Serial.printf("Playing WAV file: %s\n", filename.c_str());
     is_playing = true;
@@ -1428,6 +1448,10 @@ void play_wav(String filename, unsigned long seek_position) {
 
 void play_mp3(String filename, unsigned long seek_position) {
     play_file(filename, false, seek_position);
+
+    // Small delay to let the buffer settle and the receiver prepare
+    delay(400);
+
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     is_playing = true;
     song_started = true;
