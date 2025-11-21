@@ -1387,6 +1387,22 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     decoder.begin();
     decoder.setDataCallback(pcm_data_callback);
     a2dp.set_data_callback_in_frames(get_data_frames);
+
+    // Pre-buffer: Decode enough frames to fill the PCM buffer
+    // This ensures valid audio data is ready before A2DP starts, preventing "chipmunk" speed-up effect.
+    Serial.println("Pre-buffering...");
+    unsigned long start_prebuf = millis();
+    // Leave room for at least one max-size frame (2304 samples) to prevent overflow in callback
+    while (pcm_buffer_len < (sizeof(pcm_buffer) / sizeof(int16_t)) - 2304 && audioFile.available() && millis() - start_prebuf < 2000) {
+        int bytes_read = audioFile.read(read_buffer, sizeof(read_buffer));
+        if (bytes_read > 0) {
+            decoder.write(read_buffer, bytes_read);
+        } else {
+            break;
+        }
+    }
+    Serial.printf("Pre-buffered %d samples in %lu ms\n", pcm_buffer_len, millis() - start_prebuf);
+
     Serial.printf("Playing %s from %s\n", filename.c_str(), from_spiffs ? "SPIFFS" : "SD");
 }
 
