@@ -86,7 +86,7 @@ BluetoothA2DPSource a2dp;
 libhelix::MP3DecoderHelix decoder;
 File audioFile;
 uint8_t read_buffer[1024];
-int16_t pcm_buffer[4096];
+int16_t pcm_buffer[8192];
 int32_t pcm_buffer_len = 0;
 
 // Button states
@@ -236,7 +236,7 @@ void pcm_data_callback(MP3FrameInfo &info, short *pcm_buffer_cb, size_t len, voi
     diag_channels = info.nChans;
 
     // Append new PCM data to the buffer
-    if (pcm_buffer_len + len < sizeof(pcm_buffer) / sizeof(int16_t)) {
+    if (pcm_buffer_len + len <= sizeof(pcm_buffer) / sizeof(int16_t)) {
         memcpy(pcm_buffer + pcm_buffer_len, pcm_buffer_cb, len * sizeof(int16_t));
         pcm_buffer_len += len;
     } else {
@@ -1393,7 +1393,7 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
     Serial.println("Pre-buffering...");
     unsigned long start_prebuf = millis();
     // Leave room for at least one max-size frame (2304 samples) to prevent overflow in callback
-    while (pcm_buffer_len < (sizeof(pcm_buffer) / sizeof(int16_t)) - 2304 && audioFile.available() && millis() - start_prebuf < 2000) {
+    while (pcm_buffer_len < (sizeof(pcm_buffer) / sizeof(int16_t)) - 4608 && audioFile.available() && millis() - start_prebuf < 2000) {
         int bytes_read = audioFile.read(read_buffer, sizeof(read_buffer));
         if (bytes_read > 0) {
             decoder.write(read_buffer, bytes_read);
