@@ -88,7 +88,6 @@ File audioFile;
 uint8_t read_buffer[1024];
 int16_t pcm_buffer[4096];
 int32_t pcm_buffer_len = 0;
-volatile int32_t silence_frames_remaining = 0;
 
 // Button states
 bool scroll_pressed = false;
@@ -185,13 +184,6 @@ String findFirstMP3() {
 // A2DP callback
 // WAV callback
 int32_t get_wav_data_frames(Frame *frame, int32_t frame_count) {
-    if (silence_frames_remaining > 0) {
-        int32_t to_fill = (silence_frames_remaining < frame_count) ? silence_frames_remaining : frame_count;
-        memset(frame, 0, to_fill * sizeof(Frame));
-        silence_frames_remaining -= to_fill;
-        return to_fill;
-    }
-
     if (audioFile && audioFile.available()) {
         int bytes_to_read = frame_count * diag_channels * (diag_bits_per_sample / 8);
         int bytes_read = audioFile.read((uint8_t*)frame, bytes_to_read);
@@ -201,13 +193,6 @@ int32_t get_wav_data_frames(Frame *frame, int32_t frame_count) {
 }
 
 int32_t get_data_frames(Frame *frame, int32_t frame_count) {
-    if (silence_frames_remaining > 0) {
-        int32_t to_fill = (silence_frames_remaining < frame_count) ? silence_frames_remaining : frame_count;
-        memset(frame, 0, to_fill * sizeof(Frame));
-        silence_frames_remaining -= to_fill;
-        return to_fill;
-    }
-
     // If we don't have enough PCM data, read from file and decode
     if (pcm_buffer_len == 0) {
         if (audioFile && audioFile.available()) {
@@ -1354,9 +1339,6 @@ void draw_player_ui() {
 }
 
 void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
-    // Inject silence at start to stabilize BT stream
-    silence_frames_remaining = 44100; // ~1 second at 44.1kHz
-
     if (audioFile) {
         audioFile.close();
     }
@@ -1425,9 +1407,6 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
 }
 
 void play_wav(String filename, unsigned long seek_position) {
-    // Inject silence at start to stabilize BT stream
-    silence_frames_remaining = 44100; // ~1 second at 44.1kHz
-
     if (audioFile) {
         audioFile.close();
     }
@@ -1457,6 +1436,10 @@ void play_wav(String filename, unsigned long seek_position) {
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
 
     a2dp.set_data_callback_in_frames(get_wav_data_frames);
+
+    // Small delay to let the buffer settle and the receiver prepare
+    delay(400);
+
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     Serial.printf("Playing WAV file: %s\n", filename.c_str());
     is_playing = true;
@@ -1465,6 +1448,10 @@ void play_wav(String filename, unsigned long seek_position) {
 
 void play_mp3(String filename, unsigned long seek_position) {
     play_file(filename, false, seek_position);
+
+    // Small delay to let the buffer settle and the receiver prepare
+    delay(400);
+
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     is_playing = true;
     song_started = true;
