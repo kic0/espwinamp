@@ -317,6 +317,7 @@ void update_playlist_selection();
 void draw_playlist_ui();
 void update_player();
 void draw_player_ui();
+void handle_audio_playback();
 void draw_header(String title);
 void play_file(String filename, bool from_spiffs, unsigned long seek_position = 0);
 void play_wav(String filename, unsigned long seek_position = 0);
@@ -526,6 +527,8 @@ void loop() {
             update_player();
             break;
     }
+
+    handle_audio_playback();
 
     // --- Draw UI ---
     if (is_display_on) {
@@ -1596,16 +1599,38 @@ void update_player() {
             play_song(current_playlist_files[current_song_index], 0);
         }
     }
+}
 
-    // The audio data is now handled by the a2dp_data_callback.
-    // We just need to check if the file has finished and play the next one.
-    if (is_playing && audioFile && !audioFile.available()) {
-        Serial.println("Song finished, playing next.");
-        current_song_index++;
-        if (current_song_index >= current_playlist_files.size()) {
-            current_song_index = 0;
-        }
-        play_song(current_playlist_files[current_song_index], 0);
+void handle_audio_playback() {
+    // Only handle playback transition in appropriate states
+    if (currentState != PLAYER && currentState != PLAYLIST_SELECTION && currentState != ARTIST_SELECTION) {
+        return;
+    }
+
+    // Basic requirements
+    if (!is_bt_connected || !is_playing || !audioFile) {
+        return;
+    }
+
+    // Check if song finished
+    if (audioFile.available()) {
+        return;
+    }
+
+    Serial.println("Song finished, playing next.");
+
+    if (current_playlist_files.empty()) {
+        is_playing = false;
+        return;
+    }
+
+    current_song_index++;
+    if (current_song_index >= current_playlist_files.size()) {
+        current_song_index = 0;
+    }
+    play_song(current_playlist_files[current_song_index], 0);
+
+    if (currentState == PLAYER) {
         ui_dirty = true;
     }
 }
