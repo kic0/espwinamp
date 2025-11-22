@@ -653,6 +653,8 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 scan_songs(full_path);
 
                 if (!current_playlist_files.empty()) {
+                    // Small delay to allow SD card to settle between scanning and playback start
+                    delay(500);
                     current_song_index = 0;
                     selected_song_in_player = 0;
                     player_scroll_offset = 0;
