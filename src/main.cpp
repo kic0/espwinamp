@@ -1573,25 +1573,35 @@ void play_song(Song song, unsigned long seek_position) {
 }
 
 void update_player() {
-    if (!is_bt_connected) {
+    // Check if we're already handling a disconnect or if connection was lost
+    static bool handling_disconnect = false;
+    if (!is_bt_connected && !handling_disconnect) {
+        handling_disconnect = true;
         Serial.println("BT disconnected during playback. Returning to discovery.");
+
         if (audioFile) {
             paused_song_index = current_song_index;
             paused_song_position = audioFile.position();
             audioFile.close();
             Serial.printf("Pausing song %d at position %lu\n", paused_song_index, paused_song_position);
         }
+
+        // Ensure A2DP callback doesn't try to access decoder or file
+        a2dp.set_data_callback_in_frames(nullptr);
+
         a2dp.disconnect();
         bt_devices.clear();
         decoder.end();
+
         song_started = false;
         is_playing = false;
         currentState = BT_DISCOVERY;
         ui_dirty = true;
+        handling_disconnect = false;
         return;
     }
 
-    if (!song_started) {
+    if (is_bt_connected && !song_started) {
         if (paused_song_index != -1) {
             current_song_index = paused_song_index;
             play_song(current_playlist_files[current_song_index], paused_song_position);
