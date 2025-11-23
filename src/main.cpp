@@ -304,6 +304,7 @@ void draw_dynamic_text(String text, int y, int x_offset, bool allow_scroll, int 
 }
 
 void handle_button_press(bool is_short_press, bool is_scroll_button);
+void stop_playback();
 void update_startup();
 void update_bt_discovery();
 void draw_bt_discovery_ui();
@@ -446,6 +447,22 @@ void setup() {
     last_activity_time = millis();
 }
 
+
+void stop_playback() {
+    if (is_playing || song_started) {
+        Serial.println("Stopping playback for transition...");
+        is_playing = false;
+        song_started = false;
+        a2dp.set_data_callback_in_frames(nullptr);
+        if (audioFile) {
+            audioFile.close();
+        }
+        decoder.end(); // Free decoder memory
+        // Clear the buffer to ensure no stale data if we restart quickly
+        memset(pcm_buffer, 0, sizeof(pcm_buffer));
+        pcm_buffer_len = 0;
+    }
+}
 
 void loop() {
     // --- Volume control ---
@@ -650,6 +667,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 String full_path = "/" + artist_name + "/" + playlist_name;
                 Serial.printf("Selected playlist: %s\n", full_path.c_str());
 
+                stop_playback(); // Stop playback before scanning to prevent resource conflict
                 scan_songs(full_path);
 
                 if (!current_playlist_files.empty()) {
@@ -1115,7 +1133,9 @@ void draw_bt_discovery_ui() {
 }
 
 void scan_songs(String full_path) {
-    current_playlist_files.clear();
+    // Force reallocation to free memory from previous playlist
+    current_playlist_files = std::vector<Song>();
+
     String cache_path = full_path + "/_songs.dat";
 
     if (is_path_visited(full_path)) {
