@@ -47,6 +47,23 @@ struct Song {
 std::vector<String> playlists;
 int selected_playlist = 0;
 int playlist_scroll_offset = 0;
+
+// ---------- Visited Paths ----------
+std::vector<String> visited_paths;
+
+bool is_path_visited(String path) {
+    for (const auto& p : visited_paths) {
+        if (p.equals(path)) return true;
+    }
+    return false;
+}
+
+void mark_path_visited(String path) {
+    if (!is_path_visited(path)) {
+        visited_paths.push_back(path);
+    }
+}
+
 std::vector<Song> current_playlist_files;
 int current_song_index = 0;
 int selected_song_in_player = 0;
@@ -300,6 +317,7 @@ void update_playlist_selection();
 void draw_playlist_ui();
 void update_player();
 void draw_player_ui();
+void handle_audio_playback();
 void draw_header(String title);
 void play_file(String filename, bool from_spiffs, unsigned long seek_position = 0);
 void play_wav(String filename, unsigned long seek_position = 0);
@@ -341,6 +359,7 @@ void calculate_scroll_offset(int &selected_item, int item_count, int &scroll_off
 
 void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param);
 void get_bt_device_props(esp_bt_gap_cb_param_t *param);
+void scan_songs(String full_path);
 
 
 void setup() {
@@ -509,6 +528,8 @@ void loop() {
             break;
     }
 
+    handle_audio_playback();
+
     // --- Draw UI ---
     if (is_display_on) {
         switch (currentState) {
@@ -629,26 +650,11 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 String full_path = "/" + artist_name + "/" + playlist_name;
                 Serial.printf("Selected playlist: %s\n", full_path.c_str());
 
-                // Scan for mp3 and wav files in the selected playlist folder
-                current_playlist_files.clear();
-                File playlist_folder = SD.open(full_path);
-                File file = playlist_folder.openNextFile();
-                while(file) {
-                    if (!file.isDirectory()) {
-                        String fileName = String(file.name());
-                        String lowerCaseFileName = fileName;
-                        lowerCaseFileName.toLowerCase();
-                        if (lowerCaseFileName.endsWith(".mp3")) {
-                            current_playlist_files.push_back({full_path + "/" + fileName, MP3});
-                        } else if (lowerCaseFileName.endsWith(".wav")) {
-                            current_playlist_files.push_back({full_path + "/" + fileName, WAV});
-                        }
-                    }
-                    file = playlist_folder.openNextFile();
-                }
-                playlist_folder.close();
+                scan_songs(full_path);
 
                 if (!current_playlist_files.empty()) {
+                    // Small delay to allow SD card to settle between scanning and playback start
+                    delay(500);
                     current_song_index = 0;
                     selected_song_in_player = 0;
                     player_scroll_offset = 0;
@@ -932,6 +938,24 @@ void update_sample_playback() {
 void scan_artists() {
     artists.clear();
 
+    if (is_path_visited("ROOT")) {
+        File cache_file = SD.open("/data/_artists.dat", FILE_READ);
+        if (cache_file) {
+             Serial.println("Artists visited, loading from cache.");
+             cache_file.readStringUntil('\n'); // skip count
+             while (cache_file.available()) {
+                String artist_name = cache_file.readStringUntil('\n');
+                artist_name.trim();
+                if (artist_name.length() > 0) {
+                    artists.push_back(artist_name);
+                }
+            }
+            cache_file.close();
+            ui_dirty = true;
+            return;
+        }
+    }
+
     // Step 1: Always scan the SD card to get the current state
     std::vector<String> current_artists_on_sd;
     File root = SD.open("/");
@@ -1012,6 +1036,7 @@ void scan_artists() {
     } else {
         Serial.println("Failed to create artist cache file.");
     }
+    mark_path_visited("ROOT");
     ui_dirty = true;
 }
 
@@ -1089,9 +1114,90 @@ void draw_bt_discovery_ui() {
     display.display();
 }
 
+void scan_songs(String full_path) {
+    current_playlist_files.clear();
+    String cache_path = full_path + "/_songs.dat";
+
+    if (is_path_visited(full_path)) {
+         File cache_file = SD.open(cache_path, FILE_READ);
+         if (cache_file) {
+             Serial.println("Songs visited, loading from cache.");
+             cache_file.readStringUntil('\n'); // skip count
+             while (cache_file.available()) {
+                 String filename = cache_file.readStringUntil('\n');
+                 filename.trim();
+                 if (filename.length() > 0) {
+                     String tempName = filename;
+                     tempName.toLowerCase();
+                     FileType type = tempName.endsWith(".wav") ? WAV : MP3;
+                     current_playlist_files.push_back({full_path + "/" + filename, type});
+                 }
+             }
+             cache_file.close();
+             return;
+         }
+    }
+
+    File playlist_folder = SD.open(full_path);
+    if (!playlist_folder) {
+        Serial.printf("Failed to open playlist folder: %s\n", full_path.c_str());
+        return;
+    }
+
+    File file = playlist_folder.openNextFile();
+    while(file) {
+        if (!file.isDirectory() && file.name()[0] != '_') {
+            String fileName = String(file.name());
+            String lowerCaseFileName = fileName;
+            lowerCaseFileName.toLowerCase();
+            if (lowerCaseFileName.endsWith(".mp3")) {
+                current_playlist_files.push_back({full_path + "/" + fileName, MP3});
+            } else if (lowerCaseFileName.endsWith(".wav")) {
+                current_playlist_files.push_back({full_path + "/" + fileName, WAV});
+            }
+        }
+        file = playlist_folder.openNextFile();
+    }
+    playlist_folder.close();
+
+    SD.remove(cache_path);
+    File cache_file = SD.open(cache_path, FILE_WRITE);
+    if (cache_file) {
+        cache_file.println(current_playlist_files.size());
+        for (const auto& song : current_playlist_files) {
+            String songPath = song.path;
+            int lastSlash = songPath.lastIndexOf('/');
+            String filename = songPath.substring(lastSlash + 1);
+            cache_file.println(filename);
+        }
+        cache_file.close();
+    }
+
+    mark_path_visited(full_path);
+}
+
 void scan_playlists(String artist_name) {
     playlists.clear();
     String artist_path = "/" + artist_name;
+
+    if (is_path_visited(artist_name)) {
+        String cache_path = artist_path + "/_albums.dat";
+        File cache_file = SD.open(cache_path, FILE_READ);
+        if (cache_file) {
+            Serial.println("Playlists visited, loading from cache.");
+            cache_file.readStringUntil('\n'); // skip count
+            while (cache_file.available()) {
+                String album_name = cache_file.readStringUntil('\n');
+                album_name.trim();
+                if (album_name.length() > 0) {
+                    playlists.push_back(album_name);
+                }
+            }
+            cache_file.close();
+            ui_dirty = true;
+            return;
+        }
+    }
 
     // Step 1: Always scan the artist folder to get the current state
     std::vector<String> current_albums_on_sd;
@@ -1175,6 +1281,7 @@ void scan_playlists(String artist_name) {
     } else {
         Serial.println("Failed to create album cache file.");
     }
+    mark_path_visited(artist_name);
     ui_dirty = true;
 }
 
@@ -1466,25 +1573,35 @@ void play_song(Song song, unsigned long seek_position) {
 }
 
 void update_player() {
-    if (!is_bt_connected) {
+    // Check if we're already handling a disconnect or if connection was lost
+    static bool handling_disconnect = false;
+    if (!is_bt_connected && !handling_disconnect) {
+        handling_disconnect = true;
         Serial.println("BT disconnected during playback. Returning to discovery.");
+
         if (audioFile) {
             paused_song_index = current_song_index;
             paused_song_position = audioFile.position();
             audioFile.close();
             Serial.printf("Pausing song %d at position %lu\n", paused_song_index, paused_song_position);
         }
+
+        // Ensure A2DP callback doesn't try to access decoder or file
+        a2dp.set_data_callback_in_frames(nullptr);
+
         a2dp.disconnect();
         bt_devices.clear();
         decoder.end();
+
         song_started = false;
         is_playing = false;
         currentState = BT_DISCOVERY;
         ui_dirty = true;
+        handling_disconnect = false;
         return;
     }
 
-    if (!song_started) {
+    if (is_bt_connected && !song_started) {
         if (paused_song_index != -1) {
             current_song_index = paused_song_index;
             play_song(current_playlist_files[current_song_index], paused_song_position);
@@ -1494,16 +1611,38 @@ void update_player() {
             play_song(current_playlist_files[current_song_index], 0);
         }
     }
+}
 
-    // The audio data is now handled by the a2dp_data_callback.
-    // We just need to check if the file has finished and play the next one.
-    if (is_playing && audioFile && !audioFile.available()) {
-        Serial.println("Song finished, playing next.");
-        current_song_index++;
-        if (current_song_index >= current_playlist_files.size()) {
-            current_song_index = 0;
-        }
-        play_song(current_playlist_files[current_song_index], 0);
+void handle_audio_playback() {
+    // Only handle playback transition in appropriate states
+    if (currentState != PLAYER && currentState != PLAYLIST_SELECTION && currentState != ARTIST_SELECTION) {
+        return;
+    }
+
+    // Basic requirements
+    if (!is_bt_connected || !is_playing || !audioFile) {
+        return;
+    }
+
+    // Check if song finished
+    if (audioFile.available()) {
+        return;
+    }
+
+    Serial.println("Song finished, playing next.");
+
+    if (current_playlist_files.empty()) {
+        is_playing = false;
+        return;
+    }
+
+    current_song_index++;
+    if (current_song_index >= current_playlist_files.size()) {
+        current_song_index = 0;
+    }
+    play_song(current_playlist_files[current_song_index], 0);
+
+    if (currentState == PLAYER) {
         ui_dirty = true;
     }
 }
