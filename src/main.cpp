@@ -106,6 +106,10 @@ uint8_t read_buffer[1024];
 int16_t pcm_buffer[8192];
 int32_t pcm_buffer_len = 0;
 
+// Thread safety
+SemaphoreHandle_t audio_mutex = NULL;
+volatile bool is_decoder_active = false;
+
 // Button states
 bool scroll_pressed = false;
 bool select_pressed = false;
@@ -201,15 +205,30 @@ String findFirstMP3() {
 // A2DP callback
 // WAV callback
 int32_t get_wav_data_frames(Frame *frame, int32_t frame_count) {
-    if (audioFile && audioFile.available()) {
-        int bytes_to_read = frame_count * diag_channels * (diag_bits_per_sample / 8);
-        int bytes_read = audioFile.read((uint8_t*)frame, bytes_to_read);
-        return bytes_read / (diag_channels * (diag_bits_per_sample / 8));
+    int32_t result = 0;
+    if (xSemaphoreTake(audio_mutex, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+        if (audioFile && audioFile.available()) {
+            int bytes_to_read = frame_count * diag_channels * (diag_bits_per_sample / 8);
+            int bytes_read = audioFile.read((uint8_t*)frame, bytes_to_read);
+            result = bytes_read / (diag_channels * (diag_bits_per_sample / 8));
+        }
+        xSemaphoreGive(audio_mutex);
     }
-    return 0;
+    return result;
 }
 
 int32_t get_data_frames(Frame *frame, int32_t frame_count) {
+    // Try to take the mutex with a short timeout
+    if (xSemaphoreTake(audio_mutex, 5 / portTICK_PERIOD_MS) != pdTRUE) {
+        return 0;
+    }
+
+    // Check if decoder is active and file is valid
+    if (!is_decoder_active || !audioFile) {
+        xSemaphoreGive(audio_mutex);
+        return 0;
+    }
+
     // If we don't have enough PCM data, read from file and decode
     if (pcm_buffer_len == 0) {
         if (audioFile && audioFile.available()) {
@@ -217,9 +236,6 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
             if (bytes_read > 0) {
                 decoder.write(read_buffer, bytes_read);
             }
-        } else {
-            // End of file or file not open
-            return 0;
         }
     }
 
@@ -241,6 +257,7 @@ int32_t get_data_frames(Frame *frame, int32_t frame_count) {
         }
     }
 
+    xSemaphoreGive(audio_mutex);
     return frames_to_provide;
 }
 
@@ -369,6 +386,9 @@ void setup() {
     Serial.begin(115200);
     while (!Serial) delay(10);
 
+    // Initialize mutex
+    audio_mutex = xSemaphoreCreateMutex();
+
     // Buttons
     pinMode(BTN_SCROLL, INPUT_PULLUP);
 
@@ -451,6 +471,9 @@ void setup() {
 void stop_playback() {
     if (is_playing || song_started) {
         Serial.println("Stopping playback for transition...");
+
+        xSemaphoreTake(audio_mutex, portMAX_DELAY);
+        is_decoder_active = false;
         is_playing = false;
         song_started = false;
         a2dp.set_data_callback_in_frames(nullptr);
@@ -461,6 +484,7 @@ void stop_playback() {
         // Clear the buffer to ensure no stale data if we restart quickly
         memset(pcm_buffer, 0, sizeof(pcm_buffer));
         pcm_buffer_len = 0;
+        xSemaphoreGive(audio_mutex);
     }
 }
 
@@ -1466,10 +1490,19 @@ void draw_player_ui() {
 }
 
 void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
+    // Stop current playback safely
+    xSemaphoreTake(audio_mutex, portMAX_DELAY);
+    is_decoder_active = false;
     if (audioFile) {
         audioFile.close();
     }
+    // Reset PCM buffer to prevent overflow from previous playback
+    memset(pcm_buffer, 0, sizeof(pcm_buffer));
+    pcm_buffer_len = 0;
+    decoder.end(); // Ensure old decoder memory is freed
+    xSemaphoreGive(audio_mutex);
 
+    // Open new file (outside mutex to allow lengthy operation)
     if (from_spiffs) {
         audioFile = SPIFFS.open(filename);
     } else {
@@ -1503,20 +1536,13 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
         }
     }
 
-    // Reset PCM buffer to prevent overflow from previous playback
-    memset(pcm_buffer, 0, sizeof(pcm_buffer));
-    pcm_buffer_len = 0;
-
-    // A2DP stream reconfigure
-    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
-
-    decoder.end();
+    // Initialize decoder
     decoder.begin();
     decoder.setDataCallback(pcm_data_callback);
-    a2dp.set_data_callback_in_frames(get_data_frames);
 
     // Pre-buffer: Decode enough frames to fill the PCM buffer
-    // This ensures valid audio data is ready before A2DP starts, preventing "chipmunk" speed-up effect.
+    // This ensures valid audio data is ready before A2DP starts.
+    // Since is_decoder_active is false, A2DP callback (if running) returns 0 and doesn't touch buffer/decoder.
     Serial.println("Pre-buffering...");
     unsigned long start_prebuf = millis();
     // Leave room for at least one max-size frame (2304 samples) to prevent overflow in callback
@@ -1529,14 +1555,24 @@ void play_file(String filename, bool from_spiffs, unsigned long seek_position) {
         }
     }
     Serial.printf("Pre-buffered %d samples in %lu ms\n", pcm_buffer_len, millis() - start_prebuf);
-
     Serial.printf("Playing %s from %s\n", filename.c_str(), from_spiffs ? "SPIFFS" : "SD");
+
+    // Enable playback
+    xSemaphoreTake(audio_mutex, portMAX_DELAY);
+    esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
+    a2dp.set_data_callback_in_frames(get_data_frames);
+    is_decoder_active = true;
+    xSemaphoreGive(audio_mutex);
 }
 
 void play_wav(String filename, unsigned long seek_position) {
+    // Stop current playback safely
+    xSemaphoreTake(audio_mutex, portMAX_DELAY);
+    is_decoder_active = false;
     if (audioFile) {
         audioFile.close();
     }
+    xSemaphoreGive(audio_mutex);
 
     WavHeader header;
     if (!parse_wav_header(filename, header)) {
@@ -1559,10 +1595,11 @@ void play_wav(String filename, unsigned long seek_position) {
     diag_bits_per_sample = header.bit_depth;
     diag_channels = header.num_channels;
 
-    // A2DP stream reconfigure
+    // Enable playback
+    xSemaphoreTake(audio_mutex, portMAX_DELAY);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
-
     a2dp.set_data_callback_in_frames(get_wav_data_frames);
+    xSemaphoreGive(audio_mutex);
 
     // Small delay to let the buffer settle and the receiver prepare
     delay(400);
