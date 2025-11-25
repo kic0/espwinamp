@@ -113,6 +113,7 @@ volatile bool is_decoder_active = false;
 // Button states
 bool scroll_pressed = false;
 bool select_pressed = false;
+bool stop_pressed = false;
 unsigned long scroll_press_time = 0;
 unsigned long select_press_time = 0;
 const int long_press_duration = 1000; // 1 second
@@ -391,6 +392,7 @@ void setup() {
 
     // Buttons
     pinMode(BTN_SCROLL, INPUT_PULLUP);
+    pinMode(BTN_STOP, INPUT_PULLUP);
 
     // 1. SD init
     Serial.println("Initializing SD Card...");
@@ -508,6 +510,19 @@ void loop() {
 
     // --- Button handling ---
     bool current_scroll = !digitalRead(BTN_SCROLL);
+    bool current_stop = !digitalRead(BTN_STOP);
+
+    // Stop button (simple press)
+    if (current_stop && !stop_pressed) {
+        stop_pressed = true;
+        // This is a simple press, no need for long press logic
+        if (is_playing) {
+            stop_playback();
+            ui_dirty = true; // a redraw to update the header icon
+        }
+    } else if (!current_stop && stop_pressed) {
+        stop_pressed = false;
+    }
 
     // Scroll button
     if (current_scroll && !scroll_pressed) {
