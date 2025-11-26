@@ -71,6 +71,7 @@ int player_scroll_offset = 0;
 bool is_playing = false;
 bool song_started = false;
 bool sample_started = false;
+bool playback_stopped_by_user = false;
 bool ui_dirty = true;
 int paused_song_index = -1;
 unsigned long paused_song_position = 0;
@@ -113,6 +114,7 @@ volatile bool is_decoder_active = false;
 // Button states
 bool scroll_pressed = false;
 bool select_pressed = false;
+bool stop_pressed = false;
 unsigned long scroll_press_time = 0;
 unsigned long select_press_time = 0;
 const int long_press_duration = 1000; // 1 second
@@ -391,6 +393,7 @@ void setup() {
 
     // Buttons
     pinMode(BTN_SCROLL, INPUT_PULLUP);
+    pinMode(BTN_STOP, INPUT_PULLUP);
 
     // 1. SD init
     Serial.println("Initializing SD Card...");
@@ -508,6 +511,25 @@ void loop() {
 
     // --- Button handling ---
     bool current_scroll = !digitalRead(BTN_SCROLL);
+    bool current_stop = !digitalRead(BTN_STOP);
+
+    // Stop button (simple press)
+    if (current_stop && !stop_pressed) {
+        stop_pressed = true;
+        last_activity_time = millis();
+        if (!is_display_on) {
+            is_display_on = true;
+            display.ssd1306_command(SSD1306_DISPLAYON);
+        }
+        // This is a simple press, no need for long press logic
+        if (is_playing) {
+            playback_stopped_by_user = true;
+            stop_playback();
+            ui_dirty = true; // a redraw to update the header icon
+        }
+    } else if (!current_stop && stop_pressed) {
+        stop_pressed = false;
+    }
 
     // Scroll button
     if (current_scroll && !scroll_pressed) {
@@ -721,6 +743,7 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 ui_dirty = true;
             } else if (current_song_index != selected_song_in_player || !song_started) {
                 current_song_index = selected_song_in_player;
+                playback_stopped_by_user = false;
                 play_song(current_playlist_files[current_song_index], 0);
             }
         }
@@ -1658,7 +1681,7 @@ void update_player() {
         return;
     }
 
-    if (is_bt_connected && !song_started) {
+    if (is_bt_connected && !song_started && !playback_stopped_by_user) {
         if (paused_song_index != -1) {
             current_song_index = paused_song_index;
             play_song(current_playlist_files[current_song_index], paused_song_position);
@@ -1697,6 +1720,7 @@ void handle_audio_playback() {
     if (current_song_index >= current_playlist_files.size()) {
         current_song_index = 0;
     }
+    playback_stopped_by_user = false;
     play_song(current_playlist_files[current_song_index], 0);
 
     if (currentState == PLAYER) {
