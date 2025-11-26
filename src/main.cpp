@@ -71,6 +71,7 @@ int player_scroll_offset = 0;
 bool is_playing = false;
 bool song_started = false;
 bool sample_started = false;
+bool playback_stopped_by_user = false;
 bool ui_dirty = true;
 int paused_song_index = -1;
 unsigned long paused_song_position = 0;
@@ -113,6 +114,8 @@ volatile bool is_decoder_active = false;
 // Button states
 bool scroll_pressed = false;
 bool select_pressed = false;
+bool stop_pressed = false;
+bool up_pressed = false;
 unsigned long scroll_press_time = 0;
 unsigned long select_press_time = 0;
 const int long_press_duration = 1000; // 1 second
@@ -120,6 +123,12 @@ bool scroll_long_press_triggered = false;
 bool select_long_press_triggered = false;
 
 // App state
+enum Button {
+    UP,
+    DOWN,
+    SELECT,
+    STOP
+};
 enum AppState {
   STARTUP,
   BT_DISCOVERY,
@@ -320,7 +329,7 @@ void draw_dynamic_text(String text, int y, int x_offset, bool allow_scroll, int 
     }
 }
 
-void handle_button_press(bool is_short_press, bool is_scroll_button);
+void handle_button_press(Button button);
 void stop_playback();
 void update_startup();
 void update_bt_discovery();
@@ -391,6 +400,8 @@ void setup() {
 
     // Buttons
     pinMode(BTN_SCROLL, INPUT_PULLUP);
+    pinMode(BTN_STOP, INPUT_PULLUP);
+    pinMode(BTN_UP, INPUT_PULLUP);
 
     // 1. SD init
     Serial.println("Initializing SD Card...");
@@ -508,6 +519,24 @@ void loop() {
 
     // --- Button handling ---
     bool current_scroll = !digitalRead(BTN_SCROLL);
+    bool current_stop = !digitalRead(BTN_STOP);
+    bool current_up = !digitalRead(BTN_UP);
+
+    // Up button (triggers on release)
+    if (current_up && !up_pressed) {
+        up_pressed = true;
+    } else if (!current_up && up_pressed) {
+        up_pressed = false;
+        handle_button_press(UP); // Action on release
+    }
+
+    // Stop button (triggers on press)
+    if (current_stop && !stop_pressed) {
+        stop_pressed = true;
+        handle_button_press(STOP);
+    } else if (!current_stop && stop_pressed) {
+        stop_pressed = false;
+    }
 
     // Scroll button
     if (current_scroll && !scroll_pressed) {
@@ -517,11 +546,11 @@ void loop() {
     } else if (!current_scroll && scroll_pressed) {
         scroll_pressed = false;
         if (!scroll_long_press_triggered) {
-            handle_button_press(true, true);
+            handle_button_press(DOWN);
         }
     }
     if (scroll_pressed && !scroll_long_press_triggered && (millis() - scroll_press_time >= long_press_duration)) {
-        handle_button_press(false, true);
+        handle_button_press(SELECT);
         scroll_long_press_triggered = true;
     }
 
@@ -603,8 +632,8 @@ void loop() {
 }
 
 
-void handle_button_press(bool is_short_press, bool is_scroll_button) {
-    Serial.printf("Button press: short=%d, scroll=%d, state=%d\n", is_short_press, is_scroll_button, currentState);
+void handle_button_press(Button button) {
+    Serial.printf("Button press: %d, state=%d\n", button, currentState);
 
     last_activity_time = millis();
     if (!is_display_on) {
@@ -614,115 +643,172 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
         return;
     }
 
+    if (button == STOP) {
+        if (is_playing) {
+            playback_stopped_by_user = true;
+            stop_playback();
+            ui_dirty = true; // a redraw to update the header icon
+        }
+        return; // Stop button action is global and doesn't depend on state
+    }
+
     if (currentState == BT_DISCOVERY) {
-        if (is_scroll_button && is_short_press) { // Scroll with short press
-            selected_bt_device++;
-            calculate_scroll_offset(selected_bt_device, bt_devices.size(), bt_discovery_scroll_offset, 2);
-            ui_dirty = true;
-        } else if (is_scroll_button && !is_short_press) { // Select with long press
-            if (!bt_devices.empty()) {
-                DiscoveredBTDevice selected_device = bt_devices[selected_bt_device];
-                Serial.printf("Selected device: %s\n", selected_device.name.c_str());
-
-                // Allow a moment for any pending remote name requests to complete
-                delay(1000);
-
-                // Stop scanning
-                esp_bt_gap_cancel_discovery();
-                is_scanning = false;
-
-                // Connect to the device
-                is_connecting = true;
-                if (a2dp.connect_to(selected_device.address)) {
-                    connection_start_time = millis();
-                    // Save the address to SPIFFS
-                    File file = SPIFFS.open("/bt_address.txt", FILE_WRITE);
-                    if (file) {
-                        char addr_str[18];
-                        sprintf(addr_str, "%02x:%02x:%02x:%02x:%02x:%02x", selected_device.address[0], selected_device.address[1], selected_device.address[2], selected_device.address[3], selected_device.address[4], selected_device.address[5]);
-                        file.print(addr_str);
-                        file.close();
-                        Serial.println("Saved BT address to SPIFFS.");
-                    } else {
-                        Serial.println("Failed to save BT address.");
-                    }
-
-                    currentState = BT_CONNECTING;
-                } else {
-                    Serial.println("Failed to connect.");
-                    is_connecting = false;
-                    // Go back to scanning
-                    is_scanning = false;
+        switch (button) {
+            case UP:
+                selected_bt_device--;
+                if (selected_bt_device < 0) {
+                    selected_bt_device = bt_devices.size() - 1;
                 }
-            }
+                calculate_scroll_offset(selected_bt_device, bt_devices.size(), bt_discovery_scroll_offset, 2);
+                ui_dirty = true;
+                break;
+            case DOWN:
+                selected_bt_device++;
+                calculate_scroll_offset(selected_bt_device, bt_devices.size(), bt_discovery_scroll_offset, 2);
+                ui_dirty = true;
+                break;
+            case SELECT:
+                if (!bt_devices.empty()) {
+                    DiscoveredBTDevice selected_device = bt_devices[selected_bt_device];
+                    Serial.printf("Selected device: %s\n", selected_device.name.c_str());
+
+                    // Allow a moment for any pending remote name requests to complete
+                    delay(1000);
+
+                    // Stop scanning
+                    esp_bt_gap_cancel_discovery();
+                    is_scanning = false;
+
+                    // Connect to the device
+                    is_connecting = true;
+                    if (a2dp.connect_to(selected_device.address)) {
+                        connection_start_time = millis();
+                        // Save the address to SPIFFS
+                        File file = SPIFFS.open("/bt_address.txt", FILE_WRITE);
+                        if (file) {
+                            char addr_str[18];
+                            sprintf(addr_str, "%02x:%02x:%02x:%02x:%02x:%02x", selected_device.address[0], selected_device.address[1], selected_device.address[2], selected_device.address[3], selected_device.address[4], selected_device.address[5]);
+                            file.print(addr_str);
+                            file.close();
+                            Serial.println("Saved BT address to SPIFFS.");
+                        } else {
+                            Serial.println("Failed to save BT address.");
+                        }
+
+                        currentState = BT_CONNECTING;
+                    } else {
+                        Serial.println("Failed to connect.");
+                        is_connecting = false;
+                        // Go back to scanning
+                        is_scanning = false;
+                    }
+                }
+                break;
         }
     } else if (currentState == ARTIST_SELECTION) {
-        if (is_scroll_button && is_short_press) { // Scroll with short press
-            selected_artist++;
-            calculate_scroll_offset(selected_artist, artists.size(), artist_scroll_offset, 2);
-            for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
-            ui_dirty = true;
-        } else if (is_scroll_button && !is_short_press) { // Select with long press
-            if (!artists.empty()) {
-                // Clear playlist data from any previous artist selection
-                playlists.clear();
-                selected_playlist = 0;
-                playlist_scroll_offset = 0;
-
-                // Transition to playlist selection for the chosen artist
-                currentState = PLAYLIST_SELECTION;
+        switch (button) {
+            case UP:
+                selected_artist--;
+                if (selected_artist < 0) {
+                    selected_artist = artists.size() - 1;
+                }
+                calculate_scroll_offset(selected_artist, artists.size(), artist_scroll_offset, 2);
+                for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
                 ui_dirty = true;
-            }
+                break;
+            case DOWN:
+                selected_artist++;
+                calculate_scroll_offset(selected_artist, artists.size(), artist_scroll_offset, 2);
+                for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
+                ui_dirty = true;
+                break;
+            case SELECT:
+                if (!artists.empty()) {
+                    // Clear playlist data from any previous artist selection
+                    playlists.clear();
+                    selected_playlist = 0;
+                    playlist_scroll_offset = 0;
+
+                    // Transition to playlist selection for the chosen artist
+                    currentState = PLAYLIST_SELECTION;
+                    ui_dirty = true;
+                }
+                break;
         }
     } else if (currentState == PLAYLIST_SELECTION) {
-        if (is_scroll_button && is_short_press) { // Scroll with short press
-            selected_playlist++;
-            calculate_scroll_offset(selected_playlist, playlists.size() + 1, playlist_scroll_offset, 2);
-            for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
-            ui_dirty = true;
-        } else if (is_scroll_button && !is_short_press) { // Select with long press
-            if (selected_playlist == playlists.size()) {
-                // This is the "back" button
-                currentState = ARTIST_SELECTION;
-                ui_dirty = true;
-            } else if (!playlists.empty()) {
-                String artist_name = artists[selected_artist];
-                String playlist_name = playlists[selected_playlist];
-                String full_path = "/" + artist_name + "/" + playlist_name;
-                Serial.printf("Selected playlist: %s\n", full_path.c_str());
-
-                stop_playback(); // Stop playback before scanning to prevent resource conflict
-                scan_songs(full_path);
-
-                if (!current_playlist_files.empty()) {
-                    // Small delay to allow SD card to settle between scanning and playback start
-                    delay(500);
-                    current_song_index = 0;
-                    selected_song_in_player = 0;
-                    player_scroll_offset = 0;
-                    song_started = false;
-                    ui_dirty = true;
-                    currentState = PLAYER;
-                } else {
-                    Serial.println("No mp3 files found in this playlist!");
+        switch (button) {
+            case UP:
+                selected_playlist--;
+                if (selected_playlist < 0) {
+                    selected_playlist = playlists.size(); // +1 for the back button
                 }
-            }
+                calculate_scroll_offset(selected_playlist, playlists.size() + 1, playlist_scroll_offset, 2);
+                for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
+                ui_dirty = true;
+                break;
+            case DOWN:
+                selected_playlist++;
+                calculate_scroll_offset(selected_playlist, playlists.size() + 1, playlist_scroll_offset, 2);
+                for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
+                ui_dirty = true;
+                break;
+            case SELECT:
+                if (selected_playlist == playlists.size()) {
+                    // This is the "back" button
+                    currentState = ARTIST_SELECTION;
+                    ui_dirty = true;
+                } else if (!playlists.empty()) {
+                    String artist_name = artists[selected_artist];
+                    String playlist_name = playlists[selected_playlist];
+                    String full_path = "/" + artist_name + "/" + playlist_name;
+                    Serial.printf("Selected playlist: %s\n", full_path.c_str());
+
+                    stop_playback(); // Stop playback before scanning to prevent resource conflict
+                    scan_songs(full_path);
+
+                    if (!current_playlist_files.empty()) {
+                        // Small delay to allow SD card to settle between scanning and playback start
+                        delay(500);
+                        current_song_index = 0;
+                        selected_song_in_player = 0;
+                        player_scroll_offset = 0;
+                        song_started = false;
+                        ui_dirty = true;
+                        currentState = PLAYER;
+                    } else {
+                        Serial.println("No mp3 files found in this playlist!");
+                    }
+                }
+                break;
         }
     } else if (currentState == PLAYER) {
-        if (is_scroll_button && is_short_press) { // Scroll through songs
-            selected_song_in_player++;
-            calculate_scroll_offset(selected_song_in_player, current_playlist_files.size() + 1, player_scroll_offset, 2);
-            for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
-            ui_dirty = true;
-        } else if (is_scroll_button && !is_short_press) { // Select and play a song
-            if (selected_song_in_player == current_playlist_files.size()) {
-                // This is the "back" button
-                currentState = PLAYLIST_SELECTION;
+        switch (button) {
+            case UP:
+                selected_song_in_player--;
+                if (selected_song_in_player < 0) {
+                    selected_song_in_player = current_playlist_files.size(); // +1 for the back button
+                }
+                calculate_scroll_offset(selected_song_in_player, current_playlist_files.size() + 1, player_scroll_offset, 2);
+                for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
                 ui_dirty = true;
-            } else if (current_song_index != selected_song_in_player || !song_started) {
-                current_song_index = selected_song_in_player;
-                play_song(current_playlist_files[current_song_index], 0);
-            }
+                break;
+            case DOWN:
+                selected_song_in_player++;
+                calculate_scroll_offset(selected_song_in_player, current_playlist_files.size() + 1, player_scroll_offset, 2);
+                for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
+                ui_dirty = true;
+                break;
+            case SELECT:
+                if (selected_song_in_player == current_playlist_files.size()) {
+                    // This is the "back" button
+                    currentState = PLAYLIST_SELECTION;
+                    ui_dirty = true;
+                } else if (current_song_index != selected_song_in_player || !song_started) {
+                    current_song_index = selected_song_in_player;
+                    playback_stopped_by_user = false;
+                    play_song(current_playlist_files[current_song_index], 0);
+                }
+                break;
         }
     }
 }
@@ -888,6 +974,7 @@ void update_bt_connecting() {
     if (is_bt_connected) {
         Serial.println("Connection established.");
         is_connecting = false;
+        delay(1000); // Allow time for BT device to initialize before sending commands
         a2dp.set_volume(current_volume);
         if (paused_song_index != -1) {
             currentState = PLAYER;
@@ -1604,6 +1691,7 @@ void play_wav(String filename, unsigned long seek_position) {
     // Small delay to let the buffer settle and the receiver prepare
     delay(400);
 
+    a2dp.set_volume(current_volume);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     Serial.printf("Playing WAV file: %s\n", filename.c_str());
     is_playing = true;
@@ -1616,6 +1704,7 @@ void play_mp3(String filename, unsigned long seek_position) {
     // Small delay to let the buffer settle and the receiver prepare
     delay(400);
 
+    a2dp.set_volume(current_volume);
     esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_START);
     is_playing = true;
     song_started = true;
@@ -1658,7 +1747,7 @@ void update_player() {
         return;
     }
 
-    if (is_bt_connected && !song_started) {
+    if (is_bt_connected && !song_started && !playback_stopped_by_user) {
         if (paused_song_index != -1) {
             current_song_index = paused_song_index;
             play_song(current_playlist_files[current_song_index], paused_song_position);
@@ -1697,6 +1786,7 @@ void handle_audio_playback() {
     if (current_song_index >= current_playlist_files.size()) {
         current_song_index = 0;
     }
+    playback_stopped_by_user = false;
     play_song(current_playlist_files[current_song_index], 0);
 
     if (currentState == PLAYER) {
