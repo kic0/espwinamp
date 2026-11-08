@@ -1,0 +1,392 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 800" width="100%" height="100%">
+  <defs>
+    <style>
+      .title { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 24px; font-weight: bold; fill: #1e293b; }
+      .subtitle { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; fill: #64748b; }
+      .box-label { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 15px; font-weight: bold; fill: #0f172a; }
+      .box-sublabel { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 11px; fill: #475569; }
+      .pin-text { font-family: 'Courier New', Courier, monospace; font-size: 12px; fill: #334155; }
+      .pin-text-bold { font-family: 'Courier New', Courier, monospace; font-size: 12px; font-weight: bold; fill: #0f172a; }
+      .wire-label { font-family: 'Courier New', Courier, monospace; font-size: 11px; font-weight: bold; }
+      .legend-text { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; fill: #334155; }
+      .note-text { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 11px; fill: #475569; font-style: italic; }
+
+      /* Colors */
+      .wire-3v3 { stroke: #dc2626; stroke-width: 2.5; fill: none; }
+      .wire-gnd { stroke: #1e293b; stroke-width: 2.5; fill: none; }
+      .wire-i2c-sda { stroke: #2563eb; stroke-width: 2.2; fill: none; }
+      .wire-i2c-scl { stroke: #0284c7; stroke-width: 2.2; fill: none; }
+      .wire-spi-cs { stroke: #d97706; stroke-width: 2.2; fill: none; }
+      .wire-spi-sck { stroke: #ca8a04; stroke-width: 2.2; fill: none; }
+      .wire-spi-mosi { stroke: #16a34a; stroke-width: 2.2; fill: none; }
+      .wire-spi-miso { stroke: #059669; stroke-width: 2.2; fill: none; }
+      .wire-analog { stroke: #9333ea; stroke-width: 2.2; fill: none; }
+    </style>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="800" fill="#f8fafc"/>
+  <rect x="20" y="20" width="1060" height="760" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
+
+  <!-- Title block -->
+  <text x="50" y="60" class="title">ESP32 Winamp Audio Player — Hardware Schematic &amp; Wiring Diagram</text>
+  <text x="50" y="82" class="subtitle">Complete connections for ESP32 DEVKIT V1 (30-Pin), SSD1306 OLED, SPI MicroSD, &amp; B103 Potentiometer</text>
+
+  <!-- ==================== ESP32 DEVKIT MODULE (CENTER) ==================== -->
+  <g transform="translate(410, 110)">
+    <!-- Board Body -->
+    <rect x="0" y="0" width="280" height="540" rx="10" fill="#1e293b" filter="url(#shadow)"/>
+    <rect x="5" y="5" width="270" height="530" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1.5"/>
+
+    <!-- ESP32 RF Shield Box -->
+    <rect x="60" y="60" width="160" height="150" rx="6" fill="#334155" stroke="#64748b" stroke-width="1.5"/>
+    <text x="140" y="125" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="16" font-weight="bold" fill="#f1f5f9">ESP-WROOM-32</text>
+    <text x="140" y="145" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="11" fill="#94a3b8">Wi-Fi + BT 4.2 BR/EDR (A2DP)</text>
+    <rect x="75" y="15" width="130" height="35" rx="3" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+    <text x="140" y="37" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="11" fill="#cbd5e1">2.4 GHz PCB Antenna</text>
+
+    <!-- Micro-USB Port -->
+    <rect x="100" y="515" width="80" height="25" rx="3" fill="#64748b" stroke="#94a3b8" stroke-width="1"/>
+    <text x="140" y="532" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10" fill="#f8fafc">MICRO-USB</text>
+
+    <!-- Onboard Buttons -->
+    <!-- EN Button -->
+    <rect x="30" y="475" width="40" height="26" rx="4" fill="#334155" stroke="#94a3b8" stroke-width="1"/>
+    <circle cx="50" cy="488" r="6" fill="#cbd5e1"/>
+    <text x="50" y="515" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="9" fill="#94a3b8">EN (RST)</text>
+
+    <!-- BOOT Button (GPIO 0) -->
+    <rect x="210" y="475" width="40" height="26" rx="4" fill="#3b82f6" stroke="#93c5fd" stroke-width="1.5"/>
+    <circle cx="230" cy="488" r="6" fill="#ffffff"/>
+    <text x="230" y="515" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="9" font-weight="bold" fill="#60a5fa">BOOT (IO0)</text>
+    <text x="230" y="468" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="9" fill="#fde047">UI Scroll / Select</text>
+
+    <!-- Board Header Label -->
+    <text x="140" y="245" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="15" font-weight="bold" fill="#38bdf8">ESP32 DEVKIT V1</text>
+    <text x="140" y="265" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="11" fill="#94a3b8">30-PIN NODEMCU FORM</text>
+
+    <!-- Status LED -->
+    <circle cx="50" cy="445" r="4" fill="#ef4444"/>
+    <text x="60" y="448" font-family="'Segoe UI', sans-serif" font-size="9" fill="#94a3b8">PWR</text>
+
+    <!-- Pin Headers Left (Pins 1 to 15) -->
+    <!-- Y start = 80, step = 26 -->
+    <!-- Left pins: 3V3, EN, VP(36), VN(39), D34, D35, D32, D33, D25, D26, D27, D14, D12, D13, GND -->
+    <g font-family="'Courier New', monospace" font-size="11" fill="#f8fafc">
+      <!-- Pin 1: 3V3 -->
+      <circle cx="15" cy="80" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1"/>
+      <text x="28" y="84" font-weight="bold" fill="#f87171">3V3</text>
+      <!-- Pin 2: EN -->
+      <circle cx="15" cy="106" r="5" fill="#475569"/>
+      <text x="28" y="110" fill="#94a3b8">EN</text>
+      <!-- Pin 3: VP/GPIO36 -->
+      <circle cx="15" cy="132" r="5" fill="#475569"/>
+      <text x="28" y="136" fill="#94a3b8">VP (36)</text>
+      <!-- Pin 4: VN/GPIO39 -->
+      <circle cx="15" cy="158" r="5" fill="#475569"/>
+      <text x="28" y="162" fill="#94a3b8">VN (39)</text>
+      <!-- Pin 5: GPIO34 -->
+      <circle cx="15" cy="184" r="5" fill="#475569"/>
+      <text x="28" y="188" fill="#94a3b8">D34</text>
+      <!-- Pin 6: GPIO35 (POT) -->
+      <circle cx="15" cy="210" r="5" fill="#a855f7" stroke="#ffffff" stroke-width="1"/>
+      <text x="28" y="214" font-weight="bold" fill="#c084fc">D35 [POT]</text>
+      <!-- Pin 7: GPIO32 -->
+      <circle cx="15" cy="236" r="5" fill="#475569"/>
+      <text x="28" y="240" fill="#94a3b8">D32</text>
+      <!-- Pin 8: GPIO33 -->
+      <circle cx="15" cy="262" r="5" fill="#475569"/>
+      <text x="28" y="266" fill="#94a3b8">D33</text>
+      <!-- Pin 9: GPIO25 -->
+      <circle cx="15" cy="288" r="5" fill="#475569"/>
+      <text x="28" y="292" fill="#94a3b8">D25</text>
+      <!-- Pin 10: GPIO26 -->
+      <circle cx="15" cy="314" r="5" fill="#475569"/>
+      <text x="28" y="318" fill="#94a3b8">D26</text>
+      <!-- Pin 11: GPIO27 -->
+      <circle cx="15" cy="340" r="5" fill="#475569"/>
+      <text x="28" y="344" fill="#94a3b8">D27</text>
+      <!-- Pin 12: GPIO14 -->
+      <circle cx="15" cy="366" r="5" fill="#475569"/>
+      <text x="28" y="370" fill="#94a3b8">D14</text>
+      <!-- Pin 13: GPIO12 -->
+      <circle cx="15" cy="392" r="5" fill="#475569"/>
+      <text x="28" y="396" fill="#94a3b8">D12</text>
+      <!-- Pin 14: GPIO13 -->
+      <circle cx="15" cy="418" r="5" fill="#475569"/>
+      <text x="28" y="422" fill="#94a3b8">D13</text>
+      <!-- Pin 15: GND -->
+      <circle cx="15" cy="444" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="28" y="448" font-weight="bold" fill="#f8fafc">GND</text>
+    </g>
+
+    <!-- Pin Headers Right (Pins 16 to 30) -->
+    <!-- Right pins: VIN(5V), GND, D13?, D23, D22, TX0, RX0, D21, D19, D18, D5, TX2(17), RX2(16), D4, D2 -->
+    <!-- Standard 30-pin right side bottom to top or top to bottom:
+         Top right to bottom:
+         Pin 30: VIN (5V)
+         Pin 29: GND
+         Pin 28: D13 / GPIO13 (or GPIO23 depending on board, let's use standard ESP32 30-pin):
+         Standard NodeMCU 30-pin:
+         Right top: VIN (5V), GND, D13, D12, D14, D27, D26, D25, D33, D32, D35, D34, VN, VP, EN
+         OR typical DevKit V1:
+         Left: EN, VP, VN, 34, 35, 32, 33, 25, 26, 27, 14, 12, 13, GND, VIN (or 3V3 at top)
+         Right: D23, D22, TX0(1), RX0(3), D21, D19, D18, D5, TX2(17), RX2(16), D4, D2, D15, GND, 3V3
+         Let's label the exact pins used in the project clearly!
+    -->
+    <g font-family="'Courier New', monospace" font-size="11" fill="#f8fafc" text-anchor="end">
+      <!-- D23: MOSI -->
+      <circle cx="265" cy="80" r="5" fill="#16a34a" stroke="#ffffff" stroke-width="1"/>
+      <text x="252" y="84" font-weight="bold" fill="#4ade80">D23 [MOSI]</text>
+      <!-- D22 -->
+      <circle cx="265" cy="106" r="5" fill="#475569"/>
+      <text x="252" y="110" fill="#94a3b8">D22</text>
+      <!-- TX0 / GPIO1 -->
+      <circle cx="265" cy="132" r="5" fill="#475569"/>
+      <text x="252" y="136" fill="#94a3b8">TX0 (1)</text>
+      <!-- RX0 / GPIO3 -->
+      <circle cx="265" cy="158" r="5" fill="#475569"/>
+      <text x="252" y="162" fill="#94a3b8">RX0 (3)</text>
+      <!-- D21 -->
+      <circle cx="265" cy="184" r="5" fill="#475569"/>
+      <text x="252" y="188" fill="#94a3b8">D21</text>
+      <!-- D19: MISO -->
+      <circle cx="265" cy="210" r="5" fill="#059669" stroke="#ffffff" stroke-width="1"/>
+      <text x="252" y="214" font-weight="bold" fill="#34d399">D19 [MISO]</text>
+      <!-- D18: SCK -->
+      <circle cx="265" cy="236" r="5" fill="#ca8a04" stroke="#ffffff" stroke-width="1"/>
+      <text x="252" y="240" font-weight="bold" fill="#facc15">D18 [SCK]</text>
+      <!-- D5: CS -->
+      <circle cx="265" cy="262" r="5" fill="#d97706" stroke="#ffffff" stroke-width="1"/>
+      <text x="252" y="266" font-weight="bold" fill="#fbbf24">D5 [SD_CS]</text>
+      <!-- TX2 / GPIO17: SCL -->
+      <circle cx="265" cy="288" r="5" fill="#0284c7" stroke="#ffffff" stroke-width="1"/>
+      <text x="252" y="292" font-weight="bold" fill="#38bdf8">D17 [SCL]</text>
+      <!-- RX2 / GPIO16: SDA -->
+      <circle cx="265" cy="314" r="5" fill="#2563eb" stroke="#ffffff" stroke-width="1"/>
+      <text x="252" y="318" font-weight="bold" fill="#60a5fa">D16 [SDA]</text>
+      <!-- D4 -->
+      <circle cx="265" cy="340" r="5" fill="#475569"/>
+      <text x="252" y="344" fill="#94a3b8">D4</text>
+      <!-- D2 -->
+      <circle cx="265" cy="366" r="5" fill="#475569"/>
+      <text x="252" y="370" fill="#94a3b8">D2</text>
+      <!-- D15 -->
+      <circle cx="265" cy="392" r="5" fill="#475569"/>
+      <text x="252" y="396" fill="#94a3b8">D15</text>
+      <!-- GND Right -->
+      <circle cx="265" cy="418" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="252" y="422" font-weight="bold" fill="#f8fafc">GND</text>
+      <!-- VIN (5V) -->
+      <circle cx="265" cy="444" r="5" fill="#ea580c" stroke="#ffffff" stroke-width="1"/>
+      <text x="252" y="448" font-weight="bold" fill="#fb923c">VIN (5V)</text>
+    </g>
+  </g>
+
+  <!-- ==================== LEFT SIDE: POTENTIOMETER B103 ==================== -->
+  <g transform="translate(60, 200)">
+    <rect x="0" y="0" width="220" height="180" rx="8" fill="#ffffff" stroke="#9333ea" stroke-width="2" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="220" height="32" rx="8" fill="#f3e8ff"/>
+    <text x="110" y="22" text-anchor="middle" class="box-label" fill="#6b21a8">VOLUME POTENTIOMETER</text>
+    <text x="110" y="48" text-anchor="middle" class="box-sublabel">B103 (10k&#937; Linear / Rotary)</text>
+
+    <!-- Dial Representation -->
+    <circle cx="110" cy="90" r="28" fill="#e9d5ff" stroke="#9333ea" stroke-width="2"/>
+    <line x1="110" y1="90" x2="125" y2="72" stroke="#6b21a8" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="110" cy="90" r="4" fill="#6b21a8"/>
+
+    <!-- Pins: 1: GND, 2: WIPER (OUT), 3: 3V3 -->
+    <g font-family="'Courier New', monospace" font-size="11">
+      <!-- Pin 1: GND -->
+      <circle cx="220" cy="135" r="4" fill="#1e293b"/>
+      <text x="210" y="139" text-anchor="end" class="pin-text-bold">PIN 1 (GND)</text>
+
+      <!-- Pin 2: Wiper / Output -->
+      <circle cx="220" cy="155" r="4" fill="#9333ea"/>
+      <text x="210" y="159" text-anchor="end" class="pin-text-bold" fill="#9333ea">PIN 2 (WIPER/OUT)</text>
+
+      <!-- Pin 3: 3V3 (VCC) -->
+      <circle cx="220" cy="175" r="4" fill="#dc2626"/>
+      <text x="210" y="178" text-anchor="end" class="pin-text-bold" fill="#dc2626">PIN 3 (3.3V)</text>
+    </g>
+  </g>
+
+  <!-- ==================== TOP RIGHT: SSD1306 OLED (I2C) ==================== -->
+  <g transform="translate(780, 70)">
+    <rect x="0" y="0" width="260" height="230" rx="8" fill="#ffffff" stroke="#0284c7" stroke-width="2" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="260" height="32" rx="8" fill="#e0f2fe"/>
+    <text x="130" y="22" text-anchor="middle" class="box-label" fill="#0369a1">SSD1306 OLED DISPLAY</text>
+    <text x="130" y="48" text-anchor="middle" class="box-sublabel">128x64 I2C (Address: 0x3C)</text>
+
+    <!-- Display Screen simulation -->
+    <rect x="25" y="60" width="210" height="100" rx="4" fill="#0f172a" stroke="#334155" stroke-width="1.5"/>
+    <rect x="30" y="65" width="200" height="15" fill="#ffffff"/>
+    <text x="35" y="76" font-family="'Segoe UI', sans-serif" font-size="10" font-weight="bold" fill="#000000">Select Artist</text>
+    <text x="215" y="76" font-family="'Segoe UI', sans-serif" font-size="9" font-weight="bold" fill="#000000">75%</text>
+    <text x="35" y="95" font-family="'Courier New', monospace" font-size="11" fill="#38bdf8">&gt; Daft Punk</text>
+    <text x="35" y="110" font-family="'Courier New', monospace" font-size="11" fill="#94a3b8">  Pink Floyd</text>
+    <text x="35" y="125" font-family="'Courier New', monospace" font-size="11" fill="#94a3b8">  Queen</text>
+
+    <!-- Pins at the bottom/left of OLED box -->
+    <g font-family="'Courier New', monospace" font-size="11">
+      <!-- GND -->
+      <circle cx="0" cy="175" r="4" fill="#1e293b"/>
+      <text x="10" y="179" class="pin-text-bold">GND</text>
+
+      <!-- VCC -->
+      <circle cx="0" cy="190" r="4" fill="#dc2626"/>
+      <text x="10" y="194" class="pin-text-bold" fill="#dc2626">VCC (3.3V)</text>
+
+      <!-- SCL -->
+      <circle cx="0" cy="205" r="4" fill="#0284c7"/>
+      <text x="10" y="209" class="pin-text-bold" fill="#0284c7">SCL (SCK)</text>
+
+      <!-- SDA -->
+      <circle cx="0" cy="220" r="4" fill="#2563eb"/>
+      <text x="10" y="223" class="pin-text-bold" fill="#2563eb">SDA</text>
+    </g>
+  </g>
+
+  <!-- ==================== BOTTOM RIGHT: MICRO SD CARD (SPI) ==================== -->
+  <g transform="translate(780, 340)">
+    <rect x="0" y="0" width="260" height="260" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="2" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="260" height="32" rx="8" fill="#dcfce7"/>
+    <text x="130" y="22" text-anchor="middle" class="box-label" fill="#15803d">MICRO SD CARD MODULE</text>
+    <text x="130" y="48" text-anchor="middle" class="box-sublabel">SPI Interface (FAT32 Format)</text>
+
+    <!-- SD Card Slot Graphic -->
+    <rect x="70" y="60" width="120" height="90" rx="4" fill="#334155" stroke="#1e293b" stroke-width="1.5"/>
+    <polygon points="170,60 190,80 190,150 70,150 70,60" fill="#475569"/>
+    <text x="130" y="110" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="12" font-weight="bold" fill="#f8fafc">MicroSD</text>
+    <text x="130" y="128" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10" fill="#cbd5e1">SPI MODE</text>
+
+    <!-- Pins -->
+    <g font-family="'Courier New', monospace" font-size="11">
+      <!-- CS -->
+      <circle cx="0" cy="165" r="4" fill="#d97706"/>
+      <text x="10" y="169" class="pin-text-bold" fill="#d97706">CS</text>
+
+      <!-- SCK -->
+      <circle cx="0" cy="180" r="4" fill="#ca8a04"/>
+      <text x="10" y="184" class="pin-text-bold" fill="#ca8a04">SCK (CLK)</text>
+
+      <!-- MOSI -->
+      <circle cx="0" cy="195" r="4" fill="#16a34a"/>
+      <text x="10" y="199" class="pin-text-bold" fill="#16a34a">MOSI</text>
+
+      <!-- MISO -->
+      <circle cx="0" cy="210" r="4" fill="#059669"/>
+      <text x="10" y="214" class="pin-text-bold" fill="#059669">MISO</text>
+
+      <!-- VCC -->
+      <circle cx="0" cy="225" r="4" fill="#dc2626"/>
+      <text x="10" y="229" class="pin-text-bold" fill="#dc2626">VCC (3.3V/5V)</text>
+
+      <!-- GND -->
+      <circle cx="0" cy="240" r="4" fill="#1e293b"/>
+      <text x="10" y="244" class="pin-text-bold">GND</text>
+    </g>
+  </g>
+
+  <!-- ==================== WIRE CONNECTIONS ==================== -->
+
+  <!-- 1. POTENTIOMETER CONNECTIONS -->
+  <!-- Pot Pin 3 (3.3V) -> ESP32 3V3 (Pin 1, Left) -->
+  <path d="M 280 375 L 340 375 L 340 190 L 425 190" class="wire-3v3"/>
+
+  <!-- Pot Pin 2 (Wiper) -> ESP32 D35 (Pin 6, Left) -->
+  <path d="M 280 355 L 370 355 L 370 320 L 425 320" class="wire-analog"/>
+
+  <!-- Pot Pin 1 (GND) -> ESP32 GND (Pin 15, Left) -->
+  <path d="M 280 335 L 320 335 L 320 554 L 425 554" class="wire-gnd"/>
+
+  <!-- 2. OLED DISPLAY (I2C) CONNECTIONS -->
+  <!-- OLED SCL (275, transform + y 205 = 275) -> ESP32 D17 (Right, y = 398) -->
+  <path d="M 780 275 L 730 275 L 730 398 L 675 398" class="wire-i2c-scl"/>
+
+  <!-- OLED SDA (transform + y 220 = 290) -> ESP32 D16 (Right, y = 424) -->
+  <path d="M 780 290 L 745 290 L 745 424 L 675 424" class="wire-i2c-sda"/>
+
+  <!-- OLED VCC (transform + y 190 = 260) -> 3.3V Bus -->
+  <path d="M 780 260 L 715 260 L 715 100 L 415 100 L 415 190" class="wire-3v3"/>
+
+  <!-- OLED GND (transform + y 175 = 245) -> ESP32 GND (Right Pin 29, y = 528) -->
+  <path d="M 780 245 L 760 245 L 760 528 L 675 528" class="wire-gnd"/>
+
+  <!-- 3. MICRO SD CARD (SPI) CONNECTIONS -->
+  <!-- SD CS (transform 340 + 165 = 505) -> ESP32 D5 (Right, y = 372) -->
+  <path d="M 780 505 L 720 505 L 720 372 L 675 372" class="wire-spi-cs"/>
+
+  <!-- SD SCK (transform 340 + 180 = 520) -> ESP32 D18 (Right, y = 346) -->
+  <path d="M 780 520 L 735 520 L 735 346 L 675 346" class="wire-spi-sck"/>
+
+  <!-- SD MOSI (transform 340 + 195 = 535) -> ESP32 D23 (Right, y = 190) -->
+  <path d="M 780 535 L 750 535 L 750 190 L 675 190" class="wire-spi-mosi"/>
+
+  <!-- SD MISO (transform 340 + 210 = 550) -> ESP32 D19 (Right, y = 320) -->
+  <path d="M 780 550 L 710 550 L 710 320 L 675 320" class="wire-spi-miso"/>
+
+  <!-- SD VCC (transform 340 + 225 = 565) -> 3.3V or VIN (5V) -->
+  <!-- Connects to 3V3 rail -->
+  <path d="M 780 565 L 700 565 L 700 130 L 415 130" class="wire-3v3"/>
+
+  <!-- SD GND (transform 340 + 240 = 580) -> Common GND -->
+  <path d="M 780 580 L 765 580 L 765 536 L 675 536" class="wire-gnd"/>
+
+  <!-- ==================== WIRE JUNCTION DOTS ==================== -->
+  <circle cx="425" cy="190" r="4" fill="#ef4444"/> <!-- 3V3 ESP32 Left -->
+  <circle cx="425" cy="320" r="4" fill="#9333ea"/> <!-- D35 Pot -->
+  <circle cx="425" cy="554" r="4" fill="#1e293b"/> <!-- GND Left -->
+
+  <circle cx="675" cy="190" r="4" fill="#16a34a"/> <!-- D23 MOSI -->
+  <circle cx="675" cy="320" r="4" fill="#059669"/> <!-- D19 MISO -->
+  <circle cx="675" cy="346" r="4" fill="#ca8a04"/> <!-- D18 SCK -->
+  <circle cx="675" cy="372" r="4" fill="#d97706"/> <!-- D5 CS -->
+  <circle cx="675" cy="398" r="4" fill="#0284c7"/> <!-- D17 SCL -->
+  <circle cx="675" cy="424" r="4" fill="#2563eb"/> <!-- D16 SDA -->
+  <circle cx="675" cy="528" r="4" fill="#1e293b"/> <!-- GND Right -->
+
+  <!-- ==================== LEGEND & PIN TABLE SUMMARY ==================== -->
+  <g transform="translate(50, 670)">
+    <rect x="0" y="0" width="1000" height="95" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/>
+    <text x="20" y="24" font-family="'Segoe UI', sans-serif" font-size="13" font-weight="bold" fill="#0f172a">WIRING COLOR CODE &amp; SIGNAL LEGEND</text>
+
+    <!-- Row 1 -->
+    <line x1="25" y1="45" x2="60" y2="45" class="wire-3v3"/>
+    <circle cx="42" cy="45" r="3" fill="#dc2626"/>
+    <text x="70" y="49" class="legend-text">3.3V Power</text>
+
+    <line x1="165" y1="45" x2="200" y2="45" class="wire-gnd"/>
+    <circle cx="182" cy="45" r="3" fill="#1e293b"/>
+    <text x="210" y="49" class="legend-text">GND (Ground)</text>
+
+    <line x1="315" y1="45" x2="350" y2="45" class="wire-i2c-sda"/>
+    <text x="360" y="49" class="legend-text">I2C SDA (GPIO 16)</text>
+
+    <line x1="500" y1="45" x2="535" y2="45" class="wire-i2c-scl"/>
+    <text x="545" y="49" class="legend-text">I2C SCL (GPIO 17)</text>
+
+    <line x1="685" y1="45" x2="720" y2="45" class="wire-analog"/>
+    <text x="730" y="49" class="legend-text">ADC Input (GPIO 35 - Vol)</text>
+
+    <!-- Row 2 -->
+    <line x1="25" y1="75" x2="60" y2="75" class="wire-spi-cs"/>
+    <text x="70" y="79" class="legend-text">SPI CS (GPIO 5)</text>
+
+    <line x1="165" y1="75" x2="200" y2="75" class="wire-spi-sck"/>
+    <text x="210" y="79" class="legend-text">SPI SCK (GPIO 18)</text>
+
+    <line x1="315" y1="75" x2="350" y2="75" class="wire-spi-mosi"/>
+    <text x="360" y="79" class="legend-text">SPI MOSI (GPIO 23)</text>
+
+    <line x1="500" y1="75" x2="535" y2="75" class="wire-spi-miso"/>
+    <text x="545" y="79" class="legend-text">SPI MISO (GPIO 19)</text>
+
+    <text x="685" y="79" class="legend-text" font-weight="bold" fill="#2563eb">BOOT Button:</text>
+    <text x="770" y="79" class="legend-text">Onboard GPIO 0 (Short=Down/Scroll, Long=Select)</text>
+  </g>
+
+</svg>
