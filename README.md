@@ -17,15 +17,32 @@ This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD c
 - **Winamp-Themed Bitmap and Sound Splash Screen:** Displays a custom `splash.bmp` image from the SPIFFS filesystem on startup and plays a `sample.mp3` also from the SPIFFS filesystem /data folder.
 - **PlatformIO Build System:** The project is built using PlatformIO, which automatically manages all dependencies.
 
-## Hardware Requirements
+## Hardware Requirements & Wiring
 
-| Component                  | Connection                                             |
-| -------------------------- | ------------------------------------------------------ |
-| **ESP32 DEVKIT**           | Wroom 30 Pin (any should do updates pins accordingly)  |
-| **OLED Display**           | SDA: GPIO 16, SCL: GPIO 17                             |
-| **SD Card Reader**         | CS: GPIO 5, SCK: GPIO 18, MOSI: GPIO 23, MISO: GPIO 19 |
-| **'BOOT' Button**          | GPIO 0 (built-in)                                      |
-| **POT B103 (Volume)**      | Data: GPIO 35                                          |
+For detailed schematics, board pinouts, and electrical design notes, see the dedicated [**Hardware Schematics & Wiring Guide (SCHEMATICS.md)**](SCHEMATICS.md) and [**Vector Schematic Diagram (docs/schematics.svg)**](docs/schematics.svg).
+
+| Component | Pin / Terminal | ESP32 DEVKIT (30-Pin) Connection | Notes |
+| :--- | :--- | :--- | :--- |
+| **ESP32 DEVKIT V1** | Micro-USB / VIN | 5V Power Supply (&ge; 1A) | ESP-WROOM-32 module |
+| **OLED Display (SSD1306)** | VCC / GND | 3.3V / GND | 128x64 I2C display (Addr: 0x3C) |
+| | SDA | GPIO 16 | I2C Data |
+| | SCL | GPIO 17 | I2C Clock |
+| **MicroSD Card Reader** | VCC / GND | 3.3V (or 5V if module has 3.3V LDO) / GND | FAT32 format |
+| | CS | GPIO 5 | SPI Chip Select |
+| | SCK | GPIO 18 | SPI Clock |
+| | MOSI | GPIO 23 | SPI MOSI |
+| | MISO | GPIO 19 | SPI MISO |
+| **Potentiometer B103** | Pin 1 / Pin 3 | GND / 3.3V | 10k&Omega; volume potentiometer |
+| | Pin 2 (Wiper) | GPIO 35 | ADC1 CH7 (safe with Bluetooth active) |
+| **'BOOT' Button** | Built-in | GPIO 0 | Short press = Scroll/Down, Long press = Select |
+
+```mermaid
+graph LR
+    ESP[ESP32 DEVKIT V1] -->|I2C SDA:16 SCL:17| OLED[SSD1306 OLED Display]
+    ESP -->|SPI CS:5 SCK:18 MOSI:23 MISO:19| SD[MicroSD Card Reader]
+    POT[B103 Potentiometer] -->|Wiper: GPIO 35 ADC1| ESP
+    ESP -.->|A2DP Bluetooth Audio| BT[Bluetooth Speaker / Headphones]
+```
 
 ## Software Dependencies
 
