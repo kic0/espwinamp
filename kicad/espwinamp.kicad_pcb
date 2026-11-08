@@ -1,0 +1,273 @@
+(kicad_pcb (version 20221018) (generator pcbnew)
+
+  (general
+    (thickness 1.6)
+  )
+
+  (paper "A4")
+  (title_block
+    (title "ESP32 Winamp MP3 Player Carrier PCB")
+    (date "2025-05-18")
+    (rev "1.0")
+    (company "Open Hardware")
+    (comment 1 "Carrier board connecting ESP32 DevKit, OLED, SD Card, Pot")
+  )
+
+  (layers
+    (0 "F.Cu" signal)
+    (31 "B.Cu" signal)
+    (32 "B.Adhes" user "B.Adhesive")
+    (33 "F.Adhes" user "F.Adhesive")
+    (34 "B.Paste" user)
+    (35 "F.Paste" user)
+    (36 "B.SilkS" user "B.Silkscreen")
+    (37 "F.SilkS" user "F.Silkscreen")
+    (38 "B.Mask" user)
+    (39 "F.Mask" user)
+    (40 "Dwgs.User" user "User.Drawings")
+    (41 "Cmts.User" user "User.Comments")
+    (42 "Eco1.User" user "User.Eco1")
+    (43 "Eco2.User" user "User.Eco2")
+    (44 "Edge.Cuts" user)
+    (45 "Margin" user)
+    (46 "B.CrtYd" user "B.Courtyard")
+    (47 "F.CrtYd" user "F.Courtyard")
+    (48 "B.Fab" user)
+    (49 "F.Fab" user)
+  )
+
+  (setup
+    (pad_to_mask_clearance 0)
+    (pcbplotparams
+      (layerselection 0x00010fc_ffffffff)
+      (plot_on_all_layers_selection 0x0000000_00000000)
+      (disableapertmacros false)
+      (usegerberextensions false)
+      (usegerberattributes true)
+      (usegerberadvancedattributes true)
+      (creategerberjobfile true)
+      (dashed_line_dash_ratio 12.000000)
+      (dashed_line_gap_ratio 3.000000)
+      (svgprecision 4)
+      (plotframeref false)
+      (viasonmask false)
+      (mode 1)
+      (useauxorigin false)
+      (hpglpennumber 1)
+      (hpglpenspeed 20)
+      (hpglpendiameter 15.000000)
+      (pdf_front_fp_property_popups true)
+      (pdf_back_fp_property_popups true)
+      (dxfpadmode 0)
+      (dxfpolymode true)
+      (dxfoutline_mode true)
+      (scale 1.000000)
+      (autoscale false)
+      (outputformat 1)
+      (mirror false)
+      (drillshape 0)
+      (scaleselection 1)
+      (outputdirectory "")
+    )
+  )
+
+  (net 0 "")
+  (net 1 "+3V3")
+  (net 2 "GND")
+  (net 3 "VIN")
+  (net 4 "POT_VOL")
+  (net 5 "OLED_SDA")
+  (net 6 "OLED_SCL")
+  (net 7 "SD_CS")
+  (net 8 "SD_SCK")
+  (net 9 "SD_MOSI")
+  (net 10 "SD_MISO")
+
+  ;; PCB Outline (Edge.Cuts) 85mm x 60mm (X: 100 to 185, Y: 100 to 160)
+  (gr_line (start 100 100) (end 185 100) (layer "Edge.Cuts") (width 0.1) (tstamp 10000001))
+  (gr_line (start 185 100) (end 185 160) (layer "Edge.Cuts") (width 0.1) (tstamp 10000002))
+  (gr_line (start 185 160) (end 100 160) (layer "Edge.Cuts") (width 0.1) (tstamp 10000003))
+  (gr_line (start 100 160) (end 100 100) (layer "Edge.Cuts") (width 0.1) (tstamp 10000004))
+
+  ;; Silkscreen Titles
+  (gr_text "ESP32 WINAMP CARRIER BOARD" (at 142.5 103.5) (layer "F.SilkS")
+    (effects (font (size 1.5 1.5) (thickness 0.3) bold)) (tstamp 10000005))
+  (gr_text "v1.0 - Open Hardware" (at 142.5 106.5) (layer "F.SilkS")
+    (effects (font (size 1.0 1.0) (thickness 0.2))) (tstamp 10000006))
+
+  ;; Component 1: ESP32 DEVKIT V1 (Left Header: X=130, Y=115 to 150.56; Right Header: X=155.4, Y=115 to 150.56)
+  ;; Standard 0.1" (2.54mm) pitch, 15 pins each row, 1.0" (25.4mm) row spacing
+  (footprint "Connector_PinSocket_2.54mm:PinSocket_1x15_P2.54mm_Vertical" (layer "F.Cu")
+    (at 130 115)
+    (descr "ESP32 DEVKIT Left Header (Pins 1-15)")
+    (property "Reference" "J_ESP_L" (at 0 -2.54) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+    (property "Value" "ESP32_PINS_1-15" (at 0 38.1) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
+    ;; Pin 1: 3V3
+    (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 1 "+3V3"))
+    ;; Pin 2: EN
+    (pad "2" thru_hole oval (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 3: VP/IO36
+    (pad "3" thru_hole oval (at 0 5.08) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 4: VN/IO39
+    (pad "4" thru_hole oval (at 0 7.62) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 5: IO34
+    (pad "5" thru_hole oval (at 0 10.16) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 6: IO35 (POT)
+    (pad "6" thru_hole oval (at 0 12.7) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 4 "POT_VOL"))
+    ;; Pin 7: IO32
+    (pad "7" thru_hole oval (at 0 15.24) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 8: IO33
+    (pad "8" thru_hole oval (at 0 17.78) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 9: IO25
+    (pad "9" thru_hole oval (at 0 20.32) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 10: IO26
+    (pad "10" thru_hole oval (at 0 22.86) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 11: IO27
+    (pad "11" thru_hole oval (at 0 25.4) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 12: IO14
+    (pad "12" thru_hole oval (at 0 27.94) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 13: IO12
+    (pad "13" thru_hole oval (at 0 30.48) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 14: IO13
+    (pad "14" thru_hole oval (at 0 33.02) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 15: GND
+    (pad "15" thru_hole oval (at 0 35.56) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 2 "GND"))
+  )
+
+  (footprint "Connector_PinSocket_2.54mm:PinSocket_1x15_P2.54mm_Vertical" (layer "F.Cu")
+    (at 155.4 115)
+    (descr "ESP32 DEVKIT Right Header (Pins 16-30)")
+    (property "Reference" "J_ESP_R" (at 0 -2.54) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+    (property "Value" "ESP32_PINS_16-30" (at 0 38.1) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
+    ;; Pin 1: VIN (Pin 30 on DevKit)
+    (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 3 "VIN"))
+    ;; Pin 2: GND (Pin 29 on DevKit)
+    (pad "2" thru_hole oval (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 2 "GND"))
+    ;; Pin 3: IO23 / MOSI (Pin 28)
+    (pad "3" thru_hole oval (at 0 5.08) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 9 "SD_MOSI"))
+    ;; Pin 4: IO22
+    (pad "4" thru_hole oval (at 0 7.62) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 5: TX0 / IO1
+    (pad "5" thru_hole oval (at 0 10.16) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 6: RX0 / IO3
+    (pad "6" thru_hole oval (at 0 12.7) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 7: IO21
+    (pad "7" thru_hole oval (at 0 15.24) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 8: IO19 / MISO
+    (pad "8" thru_hole oval (at 0 17.78) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 10 "SD_MISO"))
+    ;; Pin 9: IO18 / SCK
+    (pad "9" thru_hole oval (at 0 20.32) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 8 "SD_SCK"))
+    ;; Pin 10: IO5 / CS
+    (pad "10" thru_hole oval (at 0 22.86) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 7 "SD_CS"))
+    ;; Pin 11: IO17 / SCL
+    (pad "11" thru_hole oval (at 0 25.4) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 6 "OLED_SCL"))
+    ;; Pin 12: IO16 / SDA
+    (pad "12" thru_hole oval (at 0 27.94) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 5 "OLED_SDA"))
+    ;; Pin 13: IO4
+    (pad "13" thru_hole oval (at 0 30.48) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 14: IO2
+    (pad "14" thru_hole oval (at 0 33.02) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+    ;; Pin 15: IO15
+    (pad "15" thru_hole oval (at 0 35.56) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 0 ""))
+  )
+
+  ;; Component 2: Volume Potentiometer (RV1, B103) located at left side: X=110, Y=125
+  (footprint "Potentiometer_THT:Potentiometer_Bourns_3386P_Vertical" (layer "F.Cu")
+    (at 112 125)
+    (descr "B103 Potentiometer (Pin 1=GND, Pin 2=WIPER/IO35, Pin 3=3V3)")
+    (property "Reference" "RV1" (at 0 -4) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+    (property "Value" "B103_10k" (at 0 4) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
+    (pad "1" thru_hole rect (at -2.54 0) (size 1.6 1.6) (drill 0.9) (layers *.Cu *.Mask) (net 2 "GND"))
+    (pad "2" thru_hole oval (at 0 2.54) (size 1.6 1.6) (drill 0.9) (layers *.Cu *.Mask) (net 4 "POT_VOL"))
+    (pad "3" thru_hole oval (at 2.54 0) (size 1.6 1.6) (drill 0.9) (layers *.Cu *.Mask) (net 1 "+3V3"))
+  )
+
+  ;; Component 3: SSD1306 4-Pin OLED Header (DISP1): X=172, Y=115
+  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical" (layer "F.Cu")
+    (at 172 115)
+    (descr "SSD1306 OLED Header (1=GND, 2=VCC, 3=SCL, 4=SDA)")
+    (property "Reference" "DISP1" (at 0 -2.54) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+    (property "Value" "OLED_128x64" (at 0 10.16) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
+    (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 2 "GND"))
+    (pad "2" thru_hole oval (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 1 "+3V3"))
+    (pad "3" thru_hole oval (at 0 5.08) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 6 "OLED_SCL"))
+    (pad "4" thru_hole oval (at 0 7.62) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 5 "OLED_SDA"))
+  )
+
+  ;; Component 4: MicroSD Module 6-Pin Header (J1): X=172, Y=132
+  (footprint "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical" (layer "F.Cu")
+    (at 172 132)
+    (descr "MicroSD SPI Header (1=CS, 2=SCK, 3=MOSI, 4=MISO, 5=VCC, 6=GND)")
+    (property "Reference" "J1" (at 0 -2.54) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+    (property "Value" "MicroSD_SPI" (at 0 15.24) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
+    (pad "1" thru_hole rect (at 0 0) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 7 "SD_CS"))
+    (pad "2" thru_hole oval (at 0 2.54) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 8 "SD_SCK"))
+    (pad "3" thru_hole oval (at 0 5.08) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 9 "SD_MOSI"))
+    (pad "4" thru_hole oval (at 0 7.62) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 10 "SD_MISO"))
+    (pad "5" thru_hole oval (at 0 10.16) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 1 "+3V3"))
+    (pad "6" thru_hole oval (at 0 12.7) (size 1.7 1.7) (drill 1.0) (layers *.Cu *.Mask) (net 2 "GND"))
+  )
+
+  ;; PCB Routing Tracks
+  ;; Potentiometer Wiper (Net 4: POT_VOL) to ESP32 Pin 6 (GPIO 35)
+  (segment (start 112 127.54) (end 125 127.7) (width 0.35) (layer "F.Cu") (net 4))
+  (segment (start 125 127.7) (end 130 127.7) (width 0.35) (layer "F.Cu") (net 4))
+
+  ;; Potentiometer GND (Net 2) to ESP32 GND
+  (segment (start 109.46 125) (end 109.46 150.56) (width 0.5) (layer "F.Cu") (net 2))
+  (segment (start 109.46 150.56) (end 130 150.56) (width 0.5) (layer "F.Cu") (net 2))
+
+  ;; Potentiometer 3.3V (Net 1) to ESP32 3V3 (Pin 1: 130, 115)
+  (segment (start 114.54 125) (end 114.54 115) (width 0.5) (layer "F.Cu") (net 1))
+  (segment (start 114.54 115) (end 130 115) (width 0.5) (layer "F.Cu") (net 1))
+
+  ;; OLED SDA (Net 5) to ESP32 Pin 12 (GPIO 16: 155.4, 142.94)
+  (segment (start 172 122.62) (end 164 122.62) (width 0.35) (layer "F.Cu") (net 5))
+  (segment (start 164 122.62) (end 164 142.94) (width 0.35) (layer "F.Cu") (net 5))
+  (segment (start 164 142.94) (end 155.4 142.94) (width 0.35) (layer "F.Cu") (net 5))
+
+  ;; OLED SCL (Net 6) to ESP32 Pin 11 (GPIO 17: 155.4, 140.4)
+  (segment (start 172 120.08) (end 162 120.08) (width 0.35) (layer "B.Cu") (net 6))
+  (segment (start 162 120.08) (end 162 140.4) (width 0.35) (layer "B.Cu") (net 6))
+  (segment (start 162 140.4) (end 155.4 140.4) (width 0.35) (layer "B.Cu") (net 6))
+
+  ;; SD CS (Net 7) to ESP32 Pin 10 (GPIO 5: 155.4, 137.86)
+  (segment (start 172 132) (end 160 132) (width 0.35) (layer "F.Cu") (net 7))
+  (segment (start 160 132) (end 160 137.86) (width 0.35) (layer "F.Cu") (net 7))
+  (segment (start 160 137.86) (end 155.4 137.86) (width 0.35) (layer "F.Cu") (net 7))
+
+  ;; SD SCK (Net 8) to ESP32 Pin 9 (GPIO 18: 155.4, 135.32)
+  (segment (start 172 134.54) (end 158 134.54) (width 0.35) (layer "F.Cu") (net 8))
+  (segment (start 158 134.54) (end 158 135.32) (width 0.35) (layer "F.Cu") (net 8))
+  (segment (start 158 135.32) (end 155.4 135.32) (width 0.35) (layer "F.Cu") (net 8))
+
+  ;; SD MOSI (Net 9) to ESP32 Pin 3 (GPIO 23: 155.4, 120.08)
+  (segment (start 172 137.08) (end 166 137.08) (width 0.35) (layer "F.Cu") (net 9))
+  (segment (start 166 137.08) (end 166 120.08) (width 0.35) (layer "F.Cu") (net 9))
+  (segment (start 166 120.08) (end 155.4 120.08) (width 0.35) (layer "F.Cu") (net 9))
+
+  ;; SD MISO (Net 10) to ESP32 Pin 8 (GPIO 19: 155.4, 132.78)
+  (segment (start 172 139.62) (end 160 139.62) (width 0.35) (layer "B.Cu") (net 10))
+  (segment (start 160 139.62) (end 160 132.78) (width 0.35) (layer "B.Cu") (net 10))
+  (segment (start 160 132.78) (end 155.4 132.78) (width 0.35) (layer "B.Cu") (net 10))
+
+  ;; Power and Ground Ties
+  ;; Right Header GND (Pin 2: 155.4, 117.54) to OLED GND (172, 115)
+  (segment (start 155.4 117.54) (end 168 117.54) (width 0.5) (layer "F.Cu") (net 2))
+  (segment (start 168 117.54) (end 168 115) (width 0.5) (layer "F.Cu") (net 2))
+  (segment (start 168 115) (end 172 115) (width 0.5) (layer "F.Cu") (net 2))
+
+  ;; SD GND (172, 144.7) to OLED GND / Ground Rail
+  (segment (start 172 144.7) (end 170 144.7) (width 0.5) (layer "F.Cu") (net 2))
+  (segment (start 170 144.7) (end 170 115) (width 0.5) (layer "F.Cu") (net 2))
+  (segment (start 170 115) (end 172 115) (width 0.5) (layer "F.Cu") (net 2))
+
+  ;; +3V3 Rail: ESP32 Left Pin 1 (130, 115) to OLED VCC (172, 117.54) and SD VCC (172, 142.16)
+  (segment (start 130 115) (end 142.5 110) (width 0.6) (layer "B.Cu") (net 1))
+  (segment (start 142.5 110) (end 169 110) (width 0.6) (layer "B.Cu") (net 1))
+  (segment (start 169 110) (end 169 117.54) (width 0.6) (layer "B.Cu") (net 1))
+  (segment (start 169 117.54) (end 172 117.54) (width 0.6) (layer "B.Cu") (net 1))
+  (segment (start 169 117.54) (end 169 142.16) (width 0.6) (layer "B.Cu") (net 1))
+  (segment (start 169 142.16) (end 172 142.16) (width 0.6) (layer "B.Cu") (net 1))
+
+)

@@ -19,7 +19,10 @@ This project is a Winamp-themed MP3 player for the ESP32 DEVKIT. It uses an SD c
 
 ## Hardware Requirements & Wiring
 
-For detailed schematics, board pinouts, and electrical design notes, see the dedicated [**Hardware Schematics & Wiring Guide (SCHEMATICS.md)**](SCHEMATICS.md) and [**Vector Schematic Diagram (docs/schematics.svg)**](docs/schematics.svg).
+For detailed schematics, board pinouts, electrical design notes, and KiCad PCB design files, see:
+- [**Hardware Schematics & Wiring Guide (SCHEMATICS.md)**](SCHEMATICS.md)
+- [**Vector Schematic Diagram (docs/schematics.svg)**](docs/schematics.svg)
+- [**KiCad Project Files (kicad/)**](kicad/) (Schematic `.kicad_sch` & PCB Layout `.kicad_pcb`)
 
 | Component | Pin / Terminal | ESP32 DEVKIT (30-Pin) Connection | Notes |
 | :--- | :--- | :--- | :--- |

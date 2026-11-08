@@ -1,6 +1,16 @@
 # Hardware Schematics and Wiring Guide
 
-This document provides complete schematics, connection tables, board pinout mappings, and architectural diagrams for the **ESP32 Winamp MP3 Player**.
+This document provides complete schematics, connection tables, board pinout mappings, architectural diagrams, and KiCad PCB project files for the **ESP32 Winamp MP3 Player**.
+
+---
+
+## 0. KiCad Project Files (Schematic & PCB)
+
+Complete EDA project files ready to open in KiCad 6/7/8 are located in the [`kicad/`](kicad/) directory:
+- [**`kicad/espwinamp.kicad_pro`**](kicad/espwinamp.kicad_pro): KiCad project configuration.
+- [**`kicad/espwinamp.kicad_sch`**](kicad/espwinamp.kicad_sch): Schematic sheet with all components and net connections.
+- [**`kicad/espwinamp.kicad_pcb`**](kicad/espwinamp.kicad_pcb): 2-layer PCB layout carrier board.
+- See [**`kicad/README.md`**](kicad/README.md) for full instructions on opening, viewing, and exporting gerbers.
 
 ---
 
