@@ -225,7 +225,6 @@
     (uuid d3e7215c-3081-4a41-b883-8a0a81170022)
   )
 
-  ;; ESP32 Symbol
   (symbol (lib_id "ESP32-DEVKIT-V1:ESP32-DEVKIT-V1-30PIN") (at 81.28 111.76 0) (unit 1)
     (in_bom yes) (on_board yes) (dnp no) (fields_autoplaced)
     (uuid a1111111-2222-3333-4444-555555550001)
@@ -265,7 +264,6 @@
     (pin "30" (uuid b1111111-0001-0001-0001-000000000030))
   )
 
-  ;; Potentiometer Section
   (wire (pts (xy 25.4 101.6) (xy 25.4 96.52))
     (stroke (width 0) (type default))
     (uuid c2222222-0001-0001-0001-000000000001)
@@ -304,7 +302,6 @@
     (pin "3" (uuid b2222222-0001-0001-0001-000000000003))
   )
 
-  ;; OLED Display Section
   (wire (pts (xy 165.1 76.2) (xy 177.8 76.2))
     (stroke (width 0) (type default))
     (uuid d4444444-0001-0001-0001-000000000001)
@@ -353,7 +350,6 @@
     (pin "4" (uuid b3333333-0001-0001-0001-000000000004))
   )
 
-  ;; MicroSD Module Section
   (wire (pts (xy 165.1 114.3) (xy 177.8 114.3))
     (stroke (width 0) (type default))
     (uuid d5555555-0001-0001-0001-000000000001)
