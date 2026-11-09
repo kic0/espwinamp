@@ -138,14 +138,30 @@ uint8_t read_buffer[1024];
 int16_t pcm_buffer[4096];
 int32_t pcm_buffer_len = 0;
 
-// Button states
-bool scroll_pressed = false;
-bool select_pressed = false;
-unsigned long scroll_press_time = 0;
-unsigned long select_press_time = 0;
+// Button definitions and states
+enum ButtonAction {
+    ACT_NONE,
+    ACT_SCROLL_UP,
+    ACT_SCROLL_DOWN,
+    ACT_PLAY_SELECT,
+    ACT_STOP,
+    ACT_BACK
+};
+
+struct ButtonState {
+    int pin;
+    bool is_pressed;
+    unsigned long press_time;
+    bool long_press_triggered;
+};
+
+ButtonState btn_scroll = {BTN_SCROLL, false, 0, false};
+ButtonState btn_up     = {BTN_UP, false, 0, false};
+ButtonState btn_play   = {BTN_PLAY, false, 0, false};
+ButtonState btn_stop   = {BTN_STOP, false, 0, false};
+ButtonState btn_down   = {BTN_DOWN, false, 0, false};
+
 const int long_press_duration = 1000; // 1 second
-bool scroll_long_press_triggered = false;
-bool select_long_press_triggered = false;
 
 // App state
 enum AppState {
@@ -336,7 +352,7 @@ void draw_dynamic_text(String text, int y, int x_offset, bool allow_scroll, int 
     }
 }
 
-void handle_button_press(bool is_short_press, bool is_scroll_button);
+void handle_button_press(ButtonAction action);
 void handle_startup();
 void handle_bt_discovery();
 void handle_bt_connecting();
@@ -399,6 +415,10 @@ void setup() {
 
     // Buttons
     pinMode(BTN_SCROLL, INPUT_PULLUP);
+    pinMode(BTN_UP, INPUT_PULLUP);
+    pinMode(BTN_PLAY, INPUT_PULLUP);
+    pinMode(BTN_STOP, INPUT_PULLUP);
+    pinMode(BTN_DOWN, INPUT_PULLUP);
 
     // 1. SD init
     Serial.println("Initializing SD Card...");
@@ -494,23 +514,35 @@ void loop() {
      }
 
     // --- Button handling ---
-    bool current_scroll = !digitalRead(BTN_SCROLL);
-
-    // Scroll button
-    if (current_scroll && !scroll_pressed) {
-        scroll_pressed = true;
-        scroll_press_time = millis();
-        scroll_long_press_triggered = false;
-    } else if (!current_scroll && scroll_pressed) {
-        scroll_pressed = false;
-        if (!scroll_long_press_triggered) {
-            handle_button_press(true, true);
+    // Helper lambda to process button state changes
+    auto check_button = [](ButtonState &btn, bool supports_long_press, ButtonAction short_act, ButtonAction long_act) {
+        bool current = !digitalRead(btn.pin);
+        if (current && !btn.is_pressed) {
+            btn.is_pressed = true;
+            btn.press_time = millis();
+            btn.long_press_triggered = false;
+        } else if (!current && btn.is_pressed) {
+            btn.is_pressed = false;
+            if (!btn.long_press_triggered) {
+                handle_button_press(short_act);
+            }
         }
-    }
-    if (scroll_pressed && !scroll_long_press_triggered && (millis() - scroll_press_time >= long_press_duration)) {
-        handle_button_press(false, true);
-        scroll_long_press_triggered = true;
-    }
+        if (supports_long_press && btn.is_pressed && !btn.long_press_triggered && (millis() - btn.press_time >= long_press_duration)) {
+            handle_button_press(long_act);
+            btn.long_press_triggered = true;
+        }
+    };
+
+    // BTN_SCROLL (onboard): short -> SCROLL_DOWN, long -> PLAY_SELECT
+    check_button(btn_scroll, true, ACT_SCROLL_DOWN, ACT_PLAY_SELECT);
+    // Button 1 (UP): scroll up
+    check_button(btn_up, false, ACT_SCROLL_UP, ACT_NONE);
+    // Button 2 (PLAY): play / select folder / resume
+    check_button(btn_play, false, ACT_PLAY_SELECT, ACT_NONE);
+    // Button 3 (STOP): short -> STOP, long -> BACK
+    check_button(btn_stop, true, ACT_STOP, ACT_BACK);
+    // Button 4 (DOWN): scroll down
+    check_button(btn_down, false, ACT_SCROLL_DOWN, ACT_NONE);
 
     // --- State machine ---
     bool should_refresh_for_marquee = false;
@@ -555,15 +587,51 @@ void loop() {
 }
 
 
-void handle_button_press(bool is_short_press, bool is_scroll_button) {
-    Serial.printf("Button press: short=%d, scroll=%d, state=%d\n", is_short_press, is_scroll_button, currentState);
+void handle_button_press(ButtonAction action) {
+    Serial.printf("Button press action: %d in state=%d\n", action, currentState);
+
+    if (action == ACT_NONE) return;
+
+    // Handle Back action (e.g. Button 3 long press)
+    if (action == ACT_BACK) {
+        if (currentState == PLAYER) {
+            currentState = PLAYLIST_SELECTION;
+            ui_dirty = true;
+            return;
+        } else if (currentState == PLAYLIST_SELECTION) {
+            currentState = ARTIST_SELECTION;
+            ui_dirty = true;
+            return;
+        }
+    }
+
+    // Handle Stop action (e.g. Button 3 short press)
+    if (action == ACT_STOP) {
+        if (is_playing) {
+            if (audioFile) {
+                paused_song_index = current_song_index;
+                paused_song_position = audioFile.position();
+                audioFile.close();
+                Serial.printf("Pausing playback at index %d, position %lu\n", paused_song_index, paused_song_position);
+            }
+            decoder.end();
+            song_started = false;
+            is_playing = false;
+            ui_dirty = true;
+        }
+        return;
+    }
 
     if (currentState == BT_DISCOVERY) {
-        if (is_scroll_button && is_short_press) { // Scroll with short press
+        if (action == ACT_SCROLL_DOWN) {
             selected_bt_device++;
             calculate_scroll_offset(selected_bt_device, bt_devices.size(), bt_discovery_scroll_offset, 2);
             ui_dirty = true;
-        } else if (is_scroll_button && !is_short_press) { // Select with long press
+        } else if (action == ACT_SCROLL_UP) {
+            selected_bt_device--;
+            calculate_scroll_offset(selected_bt_device, bt_devices.size(), bt_discovery_scroll_offset, 2);
+            ui_dirty = true;
+        } else if (action == ACT_PLAY_SELECT) {
             if (!bt_devices.empty()) {
                 DiscoveredBTDevice selected_device = bt_devices[selected_bt_device];
                 Serial.printf("Selected device: %s\n", selected_device.name.c_str());
@@ -601,12 +669,17 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             }
         }
     } else if (currentState == ARTIST_SELECTION) {
-        if (is_scroll_button && is_short_press) { // Scroll with short press
+        if (action == ACT_SCROLL_DOWN) {
             selected_artist++;
             calculate_scroll_offset(selected_artist, artists.size(), artist_scroll_offset, 2);
             for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
             ui_dirty = true;
-        } else if (is_scroll_button && !is_short_press) { // Select with long press
+        } else if (action == ACT_SCROLL_UP) {
+            selected_artist--;
+            calculate_scroll_offset(selected_artist, artists.size(), artist_scroll_offset, 2);
+            for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
+            ui_dirty = true;
+        } else if (action == ACT_PLAY_SELECT) {
             if (!artists.empty()) {
                 // Clear playlist data from any previous artist selection
                 playlists.clear();
@@ -619,12 +692,17 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             }
         }
     } else if (currentState == PLAYLIST_SELECTION) {
-        if (is_scroll_button && is_short_press) { // Scroll with short press
+        if (action == ACT_SCROLL_DOWN) {
             selected_playlist++;
             calculate_scroll_offset(selected_playlist, playlists.size() + 1, playlist_scroll_offset, 2);
             for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
             ui_dirty = true;
-        } else if (is_scroll_button && !is_short_press) { // Select with long press
+        } else if (action == ACT_SCROLL_UP) {
+            selected_playlist--;
+            calculate_scroll_offset(selected_playlist, playlists.size() + 1, playlist_scroll_offset, 2);
+            for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
+            ui_dirty = true;
+        } else if (action == ACT_PLAY_SELECT) {
             if (selected_playlist == playlists.size()) {
                 // This is the "back" button
                 currentState = ARTIST_SELECTION;
@@ -671,19 +749,35 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
             }
         }
     } else if (currentState == PLAYER) {
-        if (is_scroll_button && is_short_press) { // Scroll through songs
+        if (action == ACT_SCROLL_DOWN) {
             selected_song_in_player++;
             calculate_scroll_offset(selected_song_in_player, current_playlist_files.size() + 1, player_scroll_offset, 2);
             for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
             ui_dirty = true;
-        } else if (is_scroll_button && !is_short_press) { // Select and play a song
+        } else if (action == ACT_SCROLL_UP) {
+            selected_song_in_player--;
+            calculate_scroll_offset(selected_song_in_player, current_playlist_files.size() + 1, player_scroll_offset, 2);
+            for (int i=0; i<MAX_MARQUEE_LINES; ++i) is_marquee_active[i] = false;
+            ui_dirty = true;
+        } else if (action == ACT_PLAY_SELECT) {
             if (selected_song_in_player == current_playlist_files.size()) {
                 // This is the "back" button
                 currentState = PLAYLIST_SELECTION;
                 ui_dirty = true;
-            } else if (current_song_index != selected_song_in_player || !song_started) {
-                current_song_index = selected_song_in_player;
-                play_song(current_playlist_files[current_song_index], 0);
+            } else if (!is_playing || current_song_index != selected_song_in_player || !song_started) {
+                // Resume paused song if same song selected, or play selected
+                if (!is_playing && paused_song_index == selected_song_in_player && !song_started) {
+                    current_song_index = selected_song_in_player;
+                    play_song(current_playlist_files[current_song_index], paused_song_position);
+                    paused_song_index = -1;
+                    paused_song_position = 0;
+                } else {
+                    current_song_index = selected_song_in_player;
+                    play_song(current_playlist_files[current_song_index], 0);
+                    paused_song_index = -1;
+                    paused_song_position = 0;
+                }
+                ui_dirty = true;
             }
         }
     }

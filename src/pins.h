@@ -15,5 +15,11 @@
 // Onboard "select" button
 #define BTN_SCROLL 0
 
+// 4 navigation and control buttons
+#define BTN_UP 32
+#define BTN_PLAY 33
+#define BTN_STOP 27
+#define BTN_DOWN 26
+
 // B103 potentiometer for sound level control
 #define POT_PIN 35
