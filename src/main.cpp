@@ -163,6 +163,11 @@ ButtonState btn_down   = {BTN_DOWN, false, 0, false};
 
 const int long_press_duration = 1000; // 1 second
 
+// Power saving (display timeout after 2 minutes of inactivity)
+const unsigned long DISPLAY_TIMEOUT_MS = 120000; // 2 minutes
+unsigned long last_button_press_time = 0;
+bool is_display_on = true;
+
 // App state
 enum AppState {
   STARTUP,
@@ -492,6 +497,7 @@ void setup() {
     display.println("Winamp");
     display.display();
     delay(2000); // Display splash
+    last_button_press_time = millis();
 }
 
 
@@ -544,6 +550,13 @@ void loop() {
     // Button 4 (DOWN): scroll down
     check_button(btn_down, false, ACT_SCROLL_DOWN, ACT_NONE);
 
+    // --- Power saving display timeout check ---
+    if (is_display_on && (millis() - last_button_press_time >= DISPLAY_TIMEOUT_MS)) {
+        Serial.println("Display timeout reached. Turning off display for power saving.");
+        display.ssd1306_command(SSD1306_DISPLAYOFF);
+        is_display_on = false;
+    }
+
     // --- State machine ---
     bool should_refresh_for_marquee = false;
     for (int i = 0; i < MAX_MARQUEE_LINES; i++) {
@@ -591,6 +604,19 @@ void handle_button_press(ButtonAction action) {
     Serial.printf("Button press action: %d in state=%d\n", action, currentState);
 
     if (action == ACT_NONE) return;
+
+    // Power saving display wake logic:
+    // If the display is off, the first press wakes the display and ignores the action.
+    if (!is_display_on) {
+        Serial.println("Waking up display from power saving.");
+        display.ssd1306_command(SSD1306_DISPLAYON);
+        is_display_on = true;
+        last_button_press_time = millis();
+        ui_dirty = true;
+        return;
+    }
+
+    last_button_press_time = millis();
 
     // Handle Back action (e.g. Button 3 long press)
     if (action == ACT_BACK) {
@@ -1181,7 +1207,7 @@ void draw_header(String title) {
 }
 
 void draw_bt_discovery_ui() {
-    if (!ui_dirty) return;
+    if (!is_display_on || !ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
     draw_header("Select BT Speaker");
@@ -1310,7 +1336,7 @@ void scan_playlists(String artist_name) {
 }
 
 void draw_artist_ui() {
-    if (!ui_dirty) return;
+    if (!is_display_on || !ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
     draw_header("Select Artist");
@@ -1352,7 +1378,7 @@ void handle_artist_selection() {
 
 
 void draw_playlist_ui() {
-    if (!ui_dirty) return;
+    if (!is_display_on || !ui_dirty) return;
     ui_dirty = false;
     display.clearDisplay();
     draw_header("Select Playlist");
@@ -1403,7 +1429,7 @@ void handle_playlist_selection() {
 }
 
 void draw_player_ui() {
-    if (!ui_dirty) return;
+    if (!is_display_on || !ui_dirty) return;
     ui_dirty = false;
 
     display.clearDisplay();
