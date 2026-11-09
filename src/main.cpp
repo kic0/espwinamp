@@ -9,6 +9,8 @@
 #include "icons.h"
 #include "esp_gap_bt_api.h"
 #include <vector>
+#include <algorithm>
+#include <cctype>
 #include "esp_a2dp_api.h"
 #include "pins.h"
 
@@ -43,6 +45,58 @@ struct Song {
   String path;
   FileType type;
 };
+
+// Natural comparison function for case-insensitive natural sorting (e.g., 1, 2, ..., 10, 11)
+bool naturalCompare(const String& a, const String& b) {
+    size_t i = 0, j = 0;
+    size_t a_len = a.length();
+    size_t b_len = b.length();
+
+    while (i < a_len && j < b_len) {
+        if (isdigit(a[i]) && isdigit(b[j])) {
+            size_t i_start = i;
+            while (i < a_len && isdigit(a[i])) i++;
+            size_t j_start = j;
+            while (j < b_len && isdigit(b[j])) j++;
+
+            size_t i_num_start = i_start;
+            while (i_num_start < i && a[i_num_start] == '0') i_num_start++;
+            size_t j_num_start = j_start;
+            while (j_num_start < j && b[j_num_start] == '0') j_num_start++;
+
+            size_t i_digits = i - i_num_start;
+            size_t j_digits = j - j_num_start;
+
+            if (i_digits != j_digits) {
+                return i_digits < j_digits;
+            }
+
+            for (size_t p = 0; p < i_digits; ++p) {
+                if (a[i_num_start + p] != b[j_num_start + p]) {
+                    return a[i_num_start + p] < b[j_num_start + p];
+                }
+            }
+
+            size_t i_zeros = i_num_start - i_start;
+            size_t j_zeros = j_num_start - j_start;
+            if (i_zeros != j_zeros) {
+                return i_zeros < j_zeros;
+            }
+        } else {
+            char ca = tolower((unsigned char)a[i]);
+            char cb = tolower((unsigned char)b[j]);
+            if (ca != cb) {
+                return ca < cb;
+            }
+            i++;
+            j++;
+        }
+    }
+    if (i < a_len || j < b_len) {
+        return i >= a_len && j < b_len;
+    }
+    return false;
+}
 
 std::vector<String> playlists;
 int selected_playlist = 0;
@@ -600,6 +654,10 @@ void handle_button_press(bool is_short_press, bool is_scroll_button) {
                 }
                 playlist_folder.close();
 
+                std::sort(current_playlist_files.begin(), current_playlist_files.end(), [](const Song& a, const Song& b) {
+                    return naturalCompare(a.path, b.path);
+                });
+
                 if (!current_playlist_files.empty()) {
                     current_song_index = 0;
                     selected_song_in_player = 0;
@@ -946,6 +1004,8 @@ void scan_artists() {
     }
     root.close();
 
+    std::sort(current_artists_on_sd.begin(), current_artists_on_sd.end(), naturalCompare);
+
     // Step 2: Try to use the cache
     File cache_file = SD.open("/data/_artists.dat", FILE_READ);
     if (cache_file) {
@@ -1108,6 +1168,8 @@ void scan_playlists(String artist_name) {
         file = artist_dir.openNextFile();
     }
     artist_dir.close();
+
+    std::sort(current_albums_on_sd.begin(), current_albums_on_sd.end(), naturalCompare);
 
     // Step 2: Try to use the cache
     String cache_path = artist_path + "/_albums.dat";
